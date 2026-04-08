@@ -1,0 +1,118 @@
+// ---------------------------------------------------------------------------
+// Shared domain types for the x402 gateway
+// These mirror the API spec (docs/api-spec-v0-x402-gateway.md)
+// ---------------------------------------------------------------------------
+
+/** Branded string helpers */
+export type RequestId = string & { readonly __brand: 'RequestId' };
+export type QuoteId = string & { readonly __brand: 'QuoteId' };
+
+/** Routing mode: client picks a specific model or lets the platform choose */
+export type RoutingMode = 'manual' | 'auto';
+
+// ---------------------------------------------------------------------------
+// Chat Completion (OpenAI-compatible)
+// ---------------------------------------------------------------------------
+
+export interface ChatMessage {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+}
+
+export interface ChatCompletionRequest {
+  model: string;
+  messages: ChatMessage[];
+  temperature?: number;
+  stream?: boolean;
+  routing_mode?: RoutingMode;
+}
+
+export interface ChatCompletionChoice {
+  index: number;
+  message: ChatMessage;
+  finish_reason: string;
+}
+
+export interface TokenUsage {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+}
+
+export interface UsageReceipt {
+  request_id: string;
+  quote_id: string;
+  payer_address: string;
+  routing_mode: RoutingMode;
+  model_used: string;
+  unit_price_input_usd: string;
+  unit_price_output_usd: string;
+  total_cost_usd: string;
+  route_proof_hash: string;
+}
+
+export interface ChatCompletionResponse {
+  id: string;
+  object: 'chat.completion';
+  created: number;
+  model: string;
+  choices: ChatCompletionChoice[];
+  usage: TokenUsage;
+  usage_receipt: UsageReceipt;
+}
+
+// ---------------------------------------------------------------------------
+// Model Catalog
+// ---------------------------------------------------------------------------
+
+export interface ModelPricing {
+  input_usd_per_token: string;
+  output_usd_per_token: string;
+  effective_at: string;
+}
+
+export interface ModelInfo {
+  id: string;
+  provider: string;
+  context_window: number;
+  capabilities: string[];
+  pricing: ModelPricing;
+}
+
+export interface ModelListResponse {
+  data: ModelInfo[];
+}
+
+// ---------------------------------------------------------------------------
+// Audit
+// ---------------------------------------------------------------------------
+
+export interface AuditRouteDecision {
+  selected_model: string;
+  fallback_chain: string[];
+  score_summary: string;
+}
+
+export interface AuditCost {
+  subtotal_usd: string;
+  platform_fee_usd: string;
+  total_usd: string;
+}
+
+export interface AuditPayment {
+  quote_id: string;
+  chain: string;
+  asset: string;
+  payer_address: string;
+  verification_status: string;
+}
+
+export interface AuditRecord {
+  request_id: string;
+  request_hash: string;
+  routing_mode: RoutingMode;
+  route_decision: AuditRouteDecision;
+  usage: TokenUsage;
+  cost: AuditCost;
+  payment: AuditPayment;
+}
