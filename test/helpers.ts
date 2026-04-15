@@ -19,8 +19,10 @@ import type { ServiceContainer } from "../src/app.js";
 export function buildTestApp(overrides: Partial<ServiceContainer> = {}) {
   const app = Fastify({ logger: false });
 
+  const providerRegistry = createProviderRegistry();
+
   const services: ServiceContainer = {
-    providerRegistry: createProviderRegistry(),
+    providerRegistry,
     challengeService: createChallengeService({
       challengeSecret: "test-secret-at-least-32-chars-long-for-testing",
       challengeTtlSeconds: 300,
@@ -30,7 +32,7 @@ export function buildTestApp(overrides: Partial<ServiceContainer> = {}) {
     }),
     verifyService: createPaymentVerifyService("https://sepolia.base.org"),
     replayService: createReplayProtectionService(null as never),
-    routerService: createRouterService({}),
+    routerService: createRouterService({ providerRegistry }),
     meterService: createMeterService(),
     costService: createCostService(),
     ledgerService: createLedgerService(),

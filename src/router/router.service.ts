@@ -1,6 +1,8 @@
-import type { ChatCompletionRequest, RoutingMode } from '../types.js';
-import type { UpstreamResponse } from '../provider/types.js';
-import type { RouteDecision } from './types.js';
+import { createHash } from "crypto";
+import type { ChatCompletionRequest, RoutingMode } from "../types.js";
+import type { UpstreamResponse } from "../provider/types.js";
+import type { RouteDecision } from "./types.js";
+import type { IProviderRegistry } from "../provider/registry.js";
 
 export interface IRouterService {
   /**
@@ -17,33 +19,48 @@ export interface IRouterService {
   ): Promise<{ decision: RouteDecision; response: UpstreamResponse }>;
 }
 
-export function createRouterService(_deps: {
-  // Dependencies will be injected here:
-  // policyEngine: IPolicyEngine
-  // fallbackService: IFallbackService
-  // providerRegistry: IProviderRegistry
+export function createRouterService(deps: {
+  providerRegistry: IProviderRegistry;
 }): IRouterService {
+  const { providerRegistry } = deps;
+
   return {
     async route(
-      _request: ChatCompletionRequest,
-      _mode: RoutingMode,
+      request: ChatCompletionRequest,
+      mode: RoutingMode,
     ): Promise<{ decision: RouteDecision; response: UpstreamResponse }> {
-      // TODO: Implement
-      // Manual mode:
-      //   1. Get adapter from registry for request.model
-      //   2. Execute directly
-      //   3. Build RouteDecision with empty fallback_chain
-      //
-      // Auto mode:
-      //   1. Get available models from registry
-      //   2. Score with PolicyEngine
-      //   3. Build fallback chain from top candidates
-      //   4. Execute via FallbackService
-      //   5. Generate route_proof_hash
-      //
-      // Both modes:
-      //   6. Return { decision, response }
-      throw new Error('Not implemented');
+      if (mode === "manual") {
+        // Manual mode: use the specified model directly
+        const modelId = request.model;
+        const adapter = providerRegistry.getAdapter(modelId);
+
+        // Execute the request
+        const response = await adapter.execute(request, modelId);
+
+        // Build RouteDecision for manual mode
+        const decision: RouteDecision = {
+          selected_model: modelId,
+          fallback_chain: [],
+          score_summary: "manual selection",
+          route_proof_hash: "", // Will be computed below
+        };
+
+        // Generate route_proof_hash (hash of decision + response)
+        const hashInput = JSON.stringify({
+          decision,
+          response: {
+            model_used: response.model_used,
+            usage: response.usage,
+          },
+        });
+        decision.route_proof_hash = `rph_${createHash("sha256").update(hashInput).digest("hex")}`;
+
+        return { decision, response };
+      }
+
+      // Auto mode: P1 phase not yet implemented
+      // P3 will implement: PolicyEngine scoring + FallbackService execution
+      throw new Error("Auto routing mode not yet implemented");
     },
   };
 }
