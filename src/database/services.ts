@@ -2,6 +2,7 @@ import type { DatabaseConfig } from "../config/database.js";
 import type { Kysely } from "kysely";
 import type { Redis } from "ioredis";
 
+// Database service interfaces
 export interface ITraceService {
   traceRequest(
     requestId: string,
@@ -63,7 +64,10 @@ export interface ILedgerService {
   getLedgerEntries(requestId: string): Promise<Array<Record<string, unknown>>>;
 }
 
+// Database service implementation
 export function createDatabaseServices(_config: DatabaseConfig) {
+  // Return service implementations that throw "Not implemented" for now
+  // This allows us to define the interfaces without immediately implementing all logic
   return {
     createTraceService(_db: Kysely<unknown>, _redis: Redis): ITraceService {
       return {
@@ -124,5 +128,3 @@ export function createDatabaseServices(_config: DatabaseConfig) {
     },
   };
 }
-
-export type { ITraceService, IUsageService, IBillingService, IPaymentService, ILedgerService };
