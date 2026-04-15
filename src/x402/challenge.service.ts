@@ -39,10 +39,10 @@ export function createChallengeService(deps: {
       const quoteId = nanoid();
       const requestHash = this.computeRequestHash(request);
 
-      const payload = {
+      const payload: ChallengePayload = {
         quote_id: quoteId,
         request_hash: requestHash,
-        estimated_cost: estimatedCost,
+        amount: estimatedCost,
         asset: paymentAsset,
         chain: paymentChain,
         merchant_address: merchantAddress,
@@ -60,14 +60,7 @@ export function createChallengeService(deps: {
       const challengeToken = `${signature}.${Buffer.from(JSON.stringify(payload)).toString("base64url")}`;
 
       return {
-        payment_requirements: {
-          schema: "x402",
-          chain: paymentChain,
-          asset: paymentAsset,
-          amount: estimatedCost,
-          recipient: merchantAddress,
-          deadline: payload.expires_at,
-        },
+        ...payload,
         challenge_token: challengeToken,
       };
     },
@@ -84,9 +77,9 @@ export function createChallengeService(deps: {
         const payloadData = Buffer.from(payloadPart, "base64url");
         const decoder = new TextDecoder();
         const payloadString = decoder.decode(payloadData);
-        let payload;
+        let parsedPayload;
         try {
-          payload = JSON.parse(payloadString);
+          parsedPayload = JSON.parse(payloadString);
         } catch {
           throw new Error("Invalid challenge token format");
         }
@@ -106,14 +99,23 @@ export function createChallengeService(deps: {
           throw new Error("Invalid challenge signature");
         }
 
-        const expiresAt = new Date(payload.expires_at);
+        const expiresAt = new Date(parsedPayload.expires_at);
         if (Date.now() > expiresAt.getTime()) throw new ChallengeExpiredError();
 
         const recomputedHash = this.computeRequestHash(requestBody);
-        if (recomputedHash !== payload.request_hash)
+        if (recomputedHash !== parsedPayload.request_hash)
           throw new RequestHashMismatchError();
 
-        return payload;
+        // Ensure the returned object matches ChallengePayload type
+        return {
+          quote_id: parsedPayload.quote_id,
+          request_hash: parsedPayload.request_hash,
+          amount: parsedPayload.amount,
+          asset: parsedPayload.asset,
+          chain: parsedPayload.chain,
+          merchant_address: parsedPayload.merchant_address,
+          expires_at: parsedPayload.expires_at,
+        };
       } catch (error) {
         if (
           error instanceof ChallengeExpiredError ||
