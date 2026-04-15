@@ -1,21 +1,27 @@
-import type { Redis } from 'ioredis';
-import { PaymentReplayedError } from '../errors.js';
+import type { Redis } from "ioredis";
+import { PaymentReplayedError } from "../errors.js";
 
 export interface IReplayProtectionService {
   checkAndMark(paymentProofHash: string, ttlSeconds: number): Promise<boolean>;
   checkIdempotency(idempotencyKey: string): Promise<unknown | null>;
-  saveIdempotency(idempotencyKey: string, response: unknown, ttlSeconds: number): Promise<void>;
+  saveIdempotency(
+    idempotencyKey: string,
+    response: unknown,
+    ttlSeconds: number,
+  ): Promise<void>;
 }
 
-export function createReplayProtectionService(redis: Redis): IReplayProtectionService {
+export function createReplayProtectionService(
+  redis: Redis,
+): IReplayProtectionService {
   return {
     async checkAndMark(
       paymentProofHash: string,
       ttlSeconds: number,
     ): Promise<boolean> {
       const key = `payment_proof:${paymentProofHash}`;
-      const result = await redis.set(key, '1', 'EX', ttlSeconds, 'NX');
-      if (result === 'OK') {
+      const result = await redis.set(key, "1", "EX", ttlSeconds, "NX");
+      if (result === "OK") {
         return true;
       }
       throw new PaymentReplayedError();
@@ -39,7 +45,7 @@ export function createReplayProtectionService(redis: Redis): IReplayProtectionSe
     ): Promise<void> {
       const key = `idempotency:${idempotencyKey}`;
       const value = JSON.stringify(response);
-      await redis.set(key, value, 'EX', ttlSeconds);
+      await redis.set(key, value, "EX", ttlSeconds);
     },
   };
 }
