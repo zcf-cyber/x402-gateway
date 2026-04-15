@@ -9,8 +9,9 @@ const configSchema = z.object({
     .enum(["fatal", "error", "warn", "info", "debug", "trace"])
     .default("info"),
 
-  databaseUrl: z.string().url(),
-  redisUrl: z.string().url(),
+  // Database configuration
+  databaseUrl: z.string().url().default("postgresql://postgres:postgres@localhost:5432/x402_gateway"),
+  redisUrl: z.string().url().default("redis://localhost:6379"),
 
   challengeSecret: z.string().min(32),
   challengeTtlSeconds: z.coerce.number().default(300),
@@ -47,4 +48,30 @@ export function loadConfig(): Config {
     platformFeeBps: process.env["PLATFORM_FEE_BPS"],
     evmRpcUrl: process.env["EVM_RPC_URL"],
   });
+}
+
+export function parseDatabaseConfig(config: Config) {
+  const { databaseUrl, redisUrl } = config;
+  
+  const postgresUrl = new URL(databaseUrl);
+  const postgresConfig = {
+    host: postgresUrl.hostname,
+    port: parseInt(postgresUrl.port) || 5432,
+    database: postgresUrl.pathname.slice(1),
+    user: postgresUrl.username || "postgres",
+    password: postgresUrl.password || "postgres",
+  };
+
+  const redisUrlObj = new URL(redisUrl);
+  const redisConfig = {
+    host: redisUrlObj.hostname,
+    port: parseInt(redisUrlObj.port) || 6379,
+    password: redisUrlObj.password,
+    db: parseInt(redisUrlObj.searchParams.get('db') || '0'),
+  };
+
+  return {
+    postgres: postgresConfig,
+    redis: redisConfig,
+  };
 }
