@@ -63,8 +63,10 @@ export async function buildApp(config: Config) {
     });
   });
 
+  const providerRegistry = createProviderRegistry();
+
   const services: ServiceContainer = {
-    providerRegistry: createProviderRegistry(),
+    providerRegistry,
     challengeService: createChallengeService({
       challengeSecret: config.challengeSecret,
       challengeTtlSeconds: config.challengeTtlSeconds,
@@ -74,7 +76,7 @@ export async function buildApp(config: Config) {
     }),
     verifyService: createPaymentVerifyService(config.evmRpcUrl),
     replayService: createReplayProtectionService(null as never),
-    routerService: createRouterService({}),
+    routerService: createRouterService({ providerRegistry }),
     meterService: createMeterService(),
     costService: createCostService(),
     ledgerService: createLedgerService(),
