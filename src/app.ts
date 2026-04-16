@@ -77,7 +77,9 @@ export async function buildApp(config: Config) {
     verifyService: createPaymentVerifyService(config.evmRpcUrl),
     replayService: createReplayProtectionService(null as never),
     routerService: createRouterService({ providerRegistry }),
-    meterService: createMeterService(),
+    meterService: createMeterService({
+      recordUsage: async () => {}, // TODO: Integrate with database layer
+    }),
     costService: createCostService(),
     ledgerService: createLedgerService(),
     traceService: createTraceService(),

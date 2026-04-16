@@ -33,7 +33,9 @@ export function buildTestApp(overrides: Partial<ServiceContainer> = {}) {
     verifyService: createPaymentVerifyService("https://sepolia.base.org"),
     replayService: createReplayProtectionService(null as never),
     routerService: createRouterService({ providerRegistry }),
-    meterService: createMeterService(),
+    meterService: createMeterService({
+      recordUsage: async () => {}, // Mock implementation for testing
+    }),
     costService: createCostService(),
     ledgerService: createLedgerService(),
     traceService: createTraceService(),
