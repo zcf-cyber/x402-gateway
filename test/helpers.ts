@@ -20,6 +20,8 @@ export function buildTestApp(overrides: Partial<ServiceContainer> = {}) {
   const app = Fastify({ logger: false });
 
   const providerRegistry = createProviderRegistry();
+  const ledgerService = createLedgerService();
+  const traceService = createTraceService();
 
   const services: ServiceContainer = {
     providerRegistry,
@@ -37,9 +39,9 @@ export function buildTestApp(overrides: Partial<ServiceContainer> = {}) {
       recordUsage: async () => {}, // Mock implementation for testing
     }),
     costService: createCostService(),
-    ledgerService: createLedgerService(),
-    traceService: createTraceService(),
-    receiptService: createReceiptService(),
+    ledgerService,
+    traceService,
+    receiptService: createReceiptService({ traceService, ledgerService }),
     ...overrides,
   };
 
