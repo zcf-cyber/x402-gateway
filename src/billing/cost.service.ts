@@ -88,14 +88,18 @@ export interface ICostService {
 }
 
 /**
- * Parse a decimal string to a BigInt representing the value in micro-dollars (1 USD = 1_000_000).
- * This provides 6 decimal places of precision which is sufficient for token pricing.
+ * Parse a decimal string to a BigInt representing the value in nano-dollars (1 USD = 1_000_000_000).
+ * This provides 9 decimal places of precision for accurate token pricing.
+ *
+ * Design decision: Use 9-digit precision to handle very small token prices
+ * (down to $0.000000001). Example: $0.0000001 per token = 100 nano-dollars.
+ * This aligns with modern billing systems (Stripe uses similar precision).
  *
  * @param decimalStr - Decimal string (e.g., "0.00001")
- * @returns BigInt representing the value in micro-dollars
+ * @returns BigInt representing the value in nano-dollars
  * @throws Error if the string is not a valid decimal
  */
-function parseToMicroDollars(decimalStr: string): bigint {
+function parseToNanoDollars(decimalStr: string): bigint {
   const trimmed = decimalStr.trim();
 
   if (!/^\d*\.?\d*$/.test(trimmed)) {
@@ -103,28 +107,28 @@ function parseToMicroDollars(decimalStr: string): bigint {
   }
 
   const [wholePart = "0", decimalPart = ""] = trimmed.split(".");
-  const paddedDecimal = (decimalPart + "000000").slice(0, 6);
+  const paddedDecimal = (decimalPart + "000000000").slice(0, 9);
 
-  const wholeValue = BigInt(wholePart) * BigInt(1_000_000);
+  const wholeValue = BigInt(wholePart) * BigInt(1_000_000_000);
   const decimalValue = BigInt(paddedDecimal);
 
   return wholeValue + decimalValue;
 }
 
 /**
- * Convert micro-dollars to a decimal string with exactly 6 decimal places.
+ * Convert nano-dollars to a decimal string.
  *
- * @param microDollars - Value in micro-dollars
- * @returns Decimal string (e.g., "0.000010")
+ * @param nanoDollars - Value in nano-dollars
+ * @returns Decimal string (e.g., "0.00000001")
  */
-function formatFromMicroDollars(microDollars: bigint): string {
-  const isNegative = microDollars < 0;
-  const absValue = isNegative ? -microDollars : microDollars;
+function formatFromNanoDollars(nanoDollars: bigint): string {
+  const isNegative = nanoDollars < 0;
+  const absValue = isNegative ? -nanoDollars : nanoDollars;
 
-  const wholePart = absValue / BigInt(1_000_000);
-  const decimalPart = absValue % BigInt(1_000_000);
+  const wholePart = absValue / BigInt(1_000_000_000);
+  const decimalPart = absValue % BigInt(1_000_000_000);
 
-  const decimalStr = decimalPart.toString().padStart(6, "0");
+  const decimalStr = decimalPart.toString().padStart(9, "0");
   // Trim trailing zeros but keep at least one decimal place if there's a decimal part
   const trimmedDecimal = decimalStr.replace(/0+$/, "");
 
@@ -139,7 +143,7 @@ function formatFromMicroDollars(microDollars: bigint): string {
 /**
  * Create a CostService instance.
  *
- * Implementation uses BigInt arithmetic with micro-dollar precision (6 decimal places)
+ * Implementation uses BigInt arithmetic with nano-dollar precision (9 decimal places)
  * to ensure deterministic calculations without floating-point errors.
  *
  * @param deps - Optional service dependencies
@@ -167,26 +171,26 @@ export function createCostService(deps?: CostServiceDeps): ICostService {
       throw new Error("Token counts cannot be negative");
     }
 
-    // Parse prices to micro-dollars for precision-safe calculation
-    const inputPriceMicro = parseToMicroDollars(pricing.input_usd_per_token);
-    const outputPriceMicro = parseToMicroDollars(pricing.output_usd_per_token);
+    // Parse prices to nano-dollars for precision-safe calculation
+    const inputPriceNano = parseToNanoDollars(pricing.input_usd_per_token);
+    const outputPriceNano = parseToNanoDollars(pricing.output_usd_per_token);
 
     // Calculate subtotal: (prompt_tokens * input_price) + (completion_tokens * output_price)
-    const promptCostMicro = BigInt(usage.prompt_tokens) * inputPriceMicro;
-    const completionCostMicro =
-      BigInt(usage.completion_tokens) * outputPriceMicro;
-    const subtotalMicro = promptCostMicro + completionCostMicro;
+    const promptCostNano = BigInt(usage.prompt_tokens) * inputPriceNano;
+    const completionCostNano =
+      BigInt(usage.completion_tokens) * outputPriceNano;
+    const subtotalNano = promptCostNano + completionCostNano;
 
     // Calculate platform fee: subtotal * feeBps / 10000
-    const platformFeeMicro = (subtotalMicro * BigInt(feeBps)) / BigInt(10000);
+    const platformFeeNano = (subtotalNano * BigInt(feeBps)) / BigInt(10000);
 
     // Calculate total: subtotal + platform_fee
-    const totalMicro = subtotalMicro + platformFeeMicro;
+    const totalNano = subtotalNano + platformFeeNano;
 
     // Format results back to decimal strings
-    const subtotalUsd = formatFromMicroDollars(subtotalMicro);
-    const platformFeeUsd = formatFromMicroDollars(platformFeeMicro);
-    const totalUsd = formatFromMicroDollars(totalMicro);
+    const subtotalUsd = formatFromNanoDollars(subtotalNano);
+    const platformFeeUsd = formatFromNanoDollars(platformFeeNano);
+    const totalUsd = formatFromNanoDollars(totalNano);
 
     // Log calculation if logger provided
     if (log) {
@@ -224,18 +228,18 @@ export function createCostService(deps?: CostServiceDeps): ICostService {
       throw new Error("Fee basis points cannot be negative");
     }
 
-    const subtotalMicro = parseToMicroDollars(subtotalUsd);
-    const platformFeeMicro = (subtotalMicro * BigInt(feeBps)) / BigInt(10000);
+    const subtotalNano = parseToNanoDollars(subtotalUsd);
+    const platformFeeNano = (subtotalNano * BigInt(feeBps)) / BigInt(10000);
 
-    return formatFromMicroDollars(platformFeeMicro);
+    return formatFromNanoDollars(platformFeeNano);
   }
 
   function validatePricing(pricing: ModelPricing): boolean {
     if (!pricing) return false;
 
     try {
-      const inputPrice = parseToMicroDollars(pricing.input_usd_per_token);
-      const outputPrice = parseToMicroDollars(pricing.output_usd_per_token);
+      const inputPrice = parseToNanoDollars(pricing.input_usd_per_token);
+      const outputPrice = parseToNanoDollars(pricing.output_usd_per_token);
 
       // Prices must be non-negative
       if (inputPrice < 0 || outputPrice < 0) {
