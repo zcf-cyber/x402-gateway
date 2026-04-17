@@ -1,24 +1,53 @@
-import Fastify from 'fastify';
-import cors from '@fastify/cors';
-import helmet from '@fastify/helmet';
-import rateLimit from '@fastify/rate-limit';
-import sensible from '@fastify/sensible';
-import type { Config } from './config.js';
-import { AppError, errorToResponse } from './errors.js';
-import { traceIdHook } from './gateway/middleware.js';
-import { registerRoutes } from './gateway/routes.js';
-import { createProviderRegistry, type IProviderRegistry } from './provider/index.js';
-import { createChallengeService, type IChallengeService } from './x402/challenge.service.js';
-import { createPaymentVerifyService, type IPaymentVerifyService } from './x402/verify.service.js';
-import { createReplayProtectionService, type IReplayProtectionService } from './x402/replay.service.js';
-import { createRouterService, type IRouterService } from './router/router.service.js';
-import { createMeterService, type IMeterService } from './billing/meter.service.js';
-import { createCostService, type ICostService } from './billing/cost.service.js';
-import { createLedgerService, type ILedgerService } from './billing/ledger.service.js';
-import { createTraceService, type ITraceService } from './audit/trace.service.js';
-import { createReceiptService, type IReceiptService } from './audit/receipt.service.js';
+import Fastify from "fastify";
+import cors from "@fastify/cors";
+import helmet from "@fastify/helmet";
+import rateLimit from "@fastify/rate-limit";
+import sensible from "@fastify/sensible";
+import type { Config } from "./config.js";
+import { AppError, errorToResponse } from "./errors.js";
+import { traceIdHook } from "./gateway/middleware.js";
+import { registerRoutes } from "./gateway/routes.js";
+import {
+  createProviderRegistry,
+  type IProviderRegistry,
+} from "./provider/index.js";
+import {
+  createChallengeService,
+  type IChallengeService,
+} from "./x402/challenge.service.js";
+import {
+  createPaymentVerifyService,
+  type IPaymentVerifyService,
+} from "./x402/verify.service.js";
+import {
+  createReplayProtectionService,
+  type IReplayProtectionService,
+} from "./x402/replay.service.js";
+import {
+  createRouterService,
+  type IRouterService,
+} from "./router/router.service.js";
+import {
+  createMeterService,
+  type IMeterService,
+} from "./billing/meter.service.js";
+import {
+  createCostService,
+  type ICostService,
+} from "./billing/cost.service.js";
+import {
+  createLedgerService,
+  type ILedgerService,
+} from "./billing/ledger.service.js";
+import {
+  createTraceService,
+  type ITraceService,
+} from "./audit/trace.service.js";
+import {
+  createReceiptService,
+  type IReceiptService,
+} from "./audit/receipt.service.js";
 
-/** All instantiated services, passed to route handlers */
 export interface ServiceContainer {
   providerRegistry: IProviderRegistry;
   challengeService: IChallengeService;
@@ -37,45 +66,39 @@ export async function buildApp(config: Config) {
     logger: {
       level: config.logLevel,
     },
-    genReqId: () => '', // overridden by traceIdHook
+    genReqId: () => "",
   });
 
-  // --- Plugins ---
   await app.register(cors);
   await app.register(helmet);
-  await app.register(rateLimit, { max: 100, timeWindow: '1 minute' });
+  await app.register(rateLimit, { max: 100, timeWindow: "1 minute" });
   await app.register(sensible);
 
-  // --- Hooks ---
-  app.addHook('onRequest', traceIdHook);
+  app.addHook("onRequest", traceIdHook);
 
-  // --- Global error handler ---
   app.setErrorHandler((error: Error, _request, reply) => {
     if (error instanceof AppError) {
-      const body = errorToResponse(error);
-      return reply.status(error.statusCode).send(body);
+      return reply.status(error.statusCode).send(errorToResponse(error));
     }
 
-    // Zod validation errors
-    if (error.name === 'ZodError') {
+    if (error.name === "ZodError") {
       return reply.status(400).send({
-        error: { code: 'validation_error', message: error.message },
+        error: { code: "validation_error", message: error.message },
       });
     }
 
     app.log.error(error);
     return reply.status(500).send({
-      error: { code: 'internal_error', message: 'Internal server error' },
+      error: { code: "internal_error", message: "Internal server error" },
     });
   });
 
-  // --- Service wiring ---
-  // TODO: Initialize Redis and PostgreSQL connections here
-  // const redis = new Redis(config.redisUrl);
-  // const db = createKyselyPool(config.databaseUrl);
+  const providerRegistry = createProviderRegistry();
+  const ledgerService = createLedgerService();
+  const traceService = createTraceService();
 
   const services: ServiceContainer = {
-    providerRegistry: createProviderRegistry(),
+    providerRegistry,
     challengeService: createChallengeService({
       challengeSecret: config.challengeSecret,
       challengeTtlSeconds: config.challengeTtlSeconds,
@@ -83,17 +106,18 @@ export async function buildApp(config: Config) {
       paymentChain: config.paymentChain,
       paymentAsset: config.paymentAsset,
     }),
-    verifyService: createPaymentVerifyService(),
-    replayService: createReplayProtectionService(null as never), // TODO: pass real Redis
-    routerService: createRouterService({}),
-    meterService: createMeterService(),
+    verifyService: createPaymentVerifyService(config.evmRpcUrl),
+    replayService: createReplayProtectionService(null as never),
+    routerService: createRouterService({ providerRegistry }),
+    meterService: createMeterService({
+      recordUsage: async () => {}, // TODO: Integrate with database layer
+    }),
     costService: createCostService(),
-    ledgerService: createLedgerService(),
-    traceService: createTraceService(),
-    receiptService: createReceiptService(),
+    ledgerService,
+    traceService,
+    receiptService: createReceiptService({ traceService, ledgerService }),
   };
 
-  // --- Routes ---
   registerRoutes(app, services);
 
   return app;
