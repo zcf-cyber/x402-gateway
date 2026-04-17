@@ -7,16 +7,46 @@ import type { Config } from "./config.js";
 import { AppError, errorToResponse } from "./errors.js";
 import { traceIdHook } from "./gateway/middleware.js";
 import { registerRoutes } from "./gateway/routes.js";
-import { createProviderRegistry, type IProviderRegistry } from "./provider/index.js";
-import { createChallengeService, type IChallengeService } from "./x402/challenge.service.js";
-import { createPaymentVerifyService, type IPaymentVerifyService } from "./x402/verify.service.js";
-import { createReplayProtectionService, type IReplayProtectionService } from "./x402/replay.service.js";
-import { createRouterService, type IRouterService } from "./router/router.service.js";
-import { createMeterService, type IMeterService } from "./billing/meter.service.js";
-import { createCostService, type ICostService } from "./billing/cost.service.js";
-import { createLedgerService, type ILedgerService } from "./billing/ledger.service.js";
-import { createTraceService, type ITraceService } from "./audit/trace.service.js";
-import { createReceiptService, type IReceiptService } from "./audit/receipt.service.js";
+import {
+  createProviderRegistry,
+  type IProviderRegistry,
+} from "./provider/index.js";
+import {
+  createChallengeService,
+  type IChallengeService,
+} from "./x402/challenge.service.js";
+import {
+  createPaymentVerifyService,
+  type IPaymentVerifyService,
+} from "./x402/verify.service.js";
+import {
+  createReplayProtectionService,
+  type IReplayProtectionService,
+} from "./x402/replay.service.js";
+import {
+  createRouterService,
+  type IRouterService,
+} from "./router/router.service.js";
+import {
+  createMeterService,
+  type IMeterService,
+} from "./billing/meter.service.js";
+import {
+  createCostService,
+  type ICostService,
+} from "./billing/cost.service.js";
+import {
+  createLedgerService,
+  type ILedgerService,
+} from "./billing/ledger.service.js";
+import {
+  createTraceService,
+  type ITraceService,
+} from "./audit/trace.service.js";
+import {
+  createReceiptService,
+  type IReceiptService,
+} from "./audit/receipt.service.js";
 
 export interface ServiceContainer {
   providerRegistry: IProviderRegistry;
@@ -64,6 +94,8 @@ export async function buildApp(config: Config) {
   });
 
   const providerRegistry = createProviderRegistry();
+  const ledgerService = createLedgerService();
+  const traceService = createTraceService();
 
   const services: ServiceContainer = {
     providerRegistry,
@@ -81,9 +113,9 @@ export async function buildApp(config: Config) {
       recordUsage: async () => {}, // TODO: Integrate with database layer
     }),
     costService: createCostService(),
-    ledgerService: createLedgerService(),
-    traceService: createTraceService(),
-    receiptService: createReceiptService(),
+    ledgerService,
+    traceService,
+    receiptService: createReceiptService({ traceService, ledgerService }),
   };
 
   registerRoutes(app, services);
