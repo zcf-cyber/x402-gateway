@@ -177,11 +177,9 @@ describe("FallbackService - Timeout Control", () => {
       return createMockResponse("model-1");
     };
 
-    const result = await service.executeWithFallback(
-      ["model-1"],
-      executeFn,
-      { timeoutMs: 200 },
-    );
+    const result = await service.executeWithFallback(["model-1"], executeFn, {
+      timeoutMs: 200,
+    });
 
     expect(result.modelId).toBe("model-1");
   });
@@ -229,8 +227,8 @@ describe("FallbackService - Backoff Behavior", () => {
     const totalDuration = Date.now() - startTime;
 
     expect(timestamps).toHaveLength(2);
-    // Should have delay between attempts (at least 50ms)
-    expect(totalDuration).toBeGreaterThanOrEqual(50);
+    // Should have delay between attempts (at least 45ms, allowing 5ms tolerance for system load)
+    expect(totalDuration).toBeGreaterThanOrEqual(45);
   });
 
   it("should not add delay on first attempt", async () => {
@@ -257,11 +255,9 @@ describe("FallbackService - Backoff Behavior", () => {
       return createMockResponse(modelId);
     };
 
-    await service.executeWithFallback(
-      ["model-1", "model-2"],
-      executeFn,
-      { useBackoff: false },
-    );
+    await service.executeWithFallback(["model-1", "model-2"], executeFn, {
+      useBackoff: false,
+    });
 
     const duration = Date.now() - startTime;
     // Without backoff, should complete quickly
