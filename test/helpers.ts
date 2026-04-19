@@ -1,16 +1,170 @@
 import Fastify from "fastify";
 import { registerRoutes } from "../src/gateway/routes.js";
-import { createProviderRegistry } from "../src/provider/registry.js";
-import { createChallengeService } from "../src/x402/challenge.service.js";
-import { createPaymentVerifyService } from "../src/x402/verify.service.js";
-import { createReplayProtectionService } from "../src/x402/replay.service.js";
-import { createRouterService } from "../src/router/router.service.js";
-import { createMeterService } from "../src/billing/meter.service.js";
-import { createCostService } from "../src/billing/cost.service.js";
-import { createLedgerService } from "../src/billing/ledger.service.js";
-import { createTraceService } from "../src/audit/trace.service.js";
-import { createReceiptService } from "../src/audit/receipt.service.js";
+import {
+  createProviderRegistry,
+  type IProviderRegistry,
+} from "../src/provider/registry.js";
+import {
+  createChallengeService,
+  type IChallengeService,
+} from "../src/x402/challenge.service.js";
+import {
+  createPaymentVerifyService,
+  type IPaymentVerifyService,
+} from "../src/x402/verify.service.js";
+import {
+  createReplayProtectionService,
+  type IReplayProtectionService,
+} from "../src/x402/replay.service.js";
+import {
+  createRouterService,
+  type IRouterService,
+} from "../src/router/router.service.js";
+import {
+  createMeterService,
+  type IMeterService,
+} from "../src/billing/meter.service.js";
+import {
+  createCostService,
+  type ICostService,
+} from "../src/billing/cost.service.js";
+import {
+  createLedgerService,
+  type ILedgerService,
+} from "../src/billing/ledger.service.js";
+import {
+  createTraceService,
+  type ITraceService,
+} from "../src/audit/trace.service.js";
+import {
+  createReceiptService,
+  type IReceiptService,
+} from "../src/audit/receipt.service.js";
 import type { ServiceContainer } from "../src/app.js";
+import type {
+  ChatCompletionRequest,
+  RoutingMode,
+  UsageReceipt,
+} from "../src/types.js";
+import type {
+  ChallengePayload,
+  PaymentProof,
+  VerificationResult,
+} from "../src/x402/types.js";
+import type { RouteDecision } from "../src/router/types.js";
+import type { UpstreamResponse } from "../src/provider/types.js";
+import {
+  PaymentReplayedError,
+  InsufficientPaymentError,
+  PaymentVerificationFailedError,
+} from "../src/errors.js";
+
+/**
+ * Create a mock replay protection service for testing.
+ */
+export function createMockReplayService(): IReplayProtectionService {
+  const seenHashes = new Set<string>();
+  const idempotencyStore = new Map<string, unknown>();
+
+  return {
+    checkAndMark: async (
+      hash: string,
+      _ttlSeconds: number,
+    ): Promise<boolean> => {
+      if (seenHashes.has(hash)) {
+        throw new PaymentReplayedError();
+      }
+      seenHashes.add(hash);
+      return true;
+    },
+    checkIdempotency: async (key: string) => {
+      return idempotencyStore.get(key) || null;
+    },
+    saveIdempotency: async (
+      key: string,
+      response: unknown,
+      _ttlSeconds: number,
+    ) => {
+      idempotencyStore.set(key, response);
+    },
+  };
+}
+
+/**
+ * Create a mock payment verification service for testing.
+ */
+export function createMockVerifyService(options?: {
+  shouldFail?: boolean;
+  failWithInsufficientPayment?: boolean;
+}): IPaymentVerifyService {
+  return {
+    verifyPayment: async (
+      _proof: PaymentProof,
+      challenge: ChallengePayload,
+    ): Promise<VerificationResult> => {
+      if (options?.failWithInsufficientPayment) {
+        throw new InsufficientPaymentError(challenge.amount, "0.0001");
+      }
+      if (options?.shouldFail) {
+        throw new PaymentVerificationFailedError("Payment verification failed");
+      }
+      return {
+        verified: true,
+        payer_address: "0x1234567890123456789012345678901234567890",
+        amount: challenge.amount,
+      };
+    },
+  };
+}
+
+/**
+ * Create a mock router service for testing.
+ */
+export function createMockRouterService(options?: {
+  shouldFail?: boolean;
+  fallbackAttempt?: number;
+  latencyMs?: number;
+}): IRouterService {
+  return {
+    route: async (request: ChatCompletionRequest, mode: RoutingMode) => {
+      if (options?.shouldFail) {
+        throw new Error("Routing failed");
+      }
+
+      const modelId = mode === "manual" ? request.model : "openai/gpt-4o";
+      const latencyMs = options?.latencyMs ?? 100;
+
+      const response: UpstreamResponse = {
+        model_used: modelId,
+        choices: [
+          {
+            index: 0,
+            message: { role: "assistant", content: "Test response" },
+            finish_reason: "stop",
+          },
+        ],
+        usage: {
+          prompt_tokens: 10,
+          completion_tokens: 20,
+          total_tokens: 30,
+        },
+        latency_ms: latencyMs,
+      };
+
+      const decision: RouteDecision = {
+        selected_model: modelId,
+        fallback_chain: options?.fallbackAttempt
+          ? [`model-failed-${options.fallbackAttempt}`]
+          : [],
+        score_summary:
+          mode === "manual" ? "manual selection" : "auto selection",
+        route_proof_hash: "rph_test_hash",
+      };
+
+      return { decision, response };
+    },
+  };
+}
 
 /**
  * Build a test Fastify instance with stub services.
@@ -36,7 +190,7 @@ export function buildTestApp(overrides: Partial<ServiceContainer> = {}) {
     replayService: createReplayProtectionService(null as never),
     routerService: createRouterService({ providerRegistry }),
     meterService: createMeterService({
-      recordUsage: async () => {}, // Mock implementation for testing
+      recordUsage: async () => {},
     }),
     costService: createCostService(),
     ledgerService,
@@ -47,4 +201,79 @@ export function buildTestApp(overrides: Partial<ServiceContainer> = {}) {
 
   registerRoutes(app, services);
   return app;
+}
+
+/**
+ * Build a test Fastify instance with fully mocked services for end-to-end testing.
+ * This simulates the complete flow without making real external calls.
+ */
+export function buildMockedTestApp(options?: {
+  verifyShouldFail?: boolean;
+  verifyFailWithInsufficientPayment?: boolean;
+  routerShouldFail?: boolean;
+  routerFallbackAttempt?: number;
+  routerLatencyMs?: number;
+}): { app: ReturnType<typeof buildTestApp>; services: ServiceContainer } {
+  const providerRegistry = createProviderRegistry();
+  const ledgerService = createLedgerService();
+  const traceService = createTraceService();
+  const replayService = createMockReplayService();
+  const verifyService = createMockVerifyService({
+    shouldFail: options?.verifyShouldFail,
+    failWithInsufficientPayment: options?.verifyFailWithInsufficientPayment,
+  });
+  const routerService = createMockRouterService({
+    shouldFail: options?.routerShouldFail,
+    fallbackAttempt: options?.routerFallbackAttempt,
+    latencyMs: options?.routerLatencyMs,
+  });
+
+  const meterService = createMeterService({
+    recordUsage: async () => {},
+  });
+
+  const services: ServiceContainer = {
+    providerRegistry,
+    challengeService: createChallengeService({
+      challengeSecret: "test-secret-at-least-32-chars-long-for-testing",
+      challengeTtlSeconds: 300,
+      merchantAddress: "0x0000000000000000000000000000000000000001",
+      paymentChain: "base",
+      paymentAsset: "USDC",
+    }),
+    verifyService,
+    replayService,
+    routerService,
+    meterService,
+    costService: createCostService(),
+    ledgerService,
+    traceService,
+    receiptService: createReceiptService({ traceService, ledgerService }),
+  };
+
+  const app = Fastify({ logger: false });
+  registerRoutes(app, services);
+
+  return { app, services };
+}
+
+/**
+ * Create a mock payment proof for testing.
+ */
+export function createMockPaymentProof(
+  overrides?: Partial<PaymentProof>,
+): PaymentProof {
+  return {
+    tx_hash: "0x" + "a".repeat(64),
+    chain: "base",
+    payer_address: "0x1234567890123456789012345678901234567890",
+    ...overrides,
+  };
+}
+
+/**
+ * Encode payment proof to base64url format (as used in X-402-Payment header).
+ */
+export function encodePaymentProof(proof: PaymentProof): string {
+  return Buffer.from(JSON.stringify(proof)).toString("base64url");
 }

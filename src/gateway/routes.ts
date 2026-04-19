@@ -85,14 +85,110 @@ export function registerRoutes(
         challengePayload,
       );
 
-      // P1-P4: Route, meter, cost, ledger will be integrated here
-      // For now, return 501 as downstream services are not yet implemented
-      return reply.status(501).send({
-        error: {
-          code: "internal_error",
-          message: "Payment flow validated, routing not yet implemented",
-        },
-      });
+      // Start request trace for audit
+      const requestId =
+        `req_${Date.now()}_${Math.random().toString(36).substring(2, 11)}` as import("../types.js").RequestId;
+      await services.traceService.startTrace(
+        requestId,
+        challengePayload.request_hash,
+        body.routing_mode || "manual",
+      );
+
+      try {
+        // Route the request to upstream provider
+        const { decision, response } = await services.routerService.route(
+          body,
+          body.routing_mode || "manual",
+        );
+
+        // Record token usage
+        await services.meterService.recordUsage(
+          requestId,
+          decision.selected_model,
+          response,
+        );
+
+        // Get pricing and calculate cost
+        const pricing = {
+          input_usd_per_token: "0.00001", // $0.01 per 1K tokens
+          output_usd_per_token: "0.00002", // $0.02 per 1K tokens
+          effective_at: new Date().toISOString(),
+        };
+        const usage = {
+          request_id: requestId,
+          model_id: decision.selected_model,
+          prompt_tokens: response.usage.prompt_tokens,
+          completion_tokens: response.usage.completion_tokens,
+          total_tokens: response.usage.total_tokens,
+        };
+        const cost = services.costService.calculateCost(usage, pricing, 50);
+
+        // Commit to ledger
+        await services.ledgerService.commit({
+          request_id: requestId,
+          quote_id: challengePayload.quote_id,
+          payer_address: paymentProof.payer_address,
+          model_used: decision.selected_model,
+          usage,
+          cost,
+        });
+
+        // Complete the trace
+        await services.traceService.completeTrace(requestId, {
+          selectedModel: decision.selected_model,
+          fallbackChain: decision.fallback_chain,
+          scoreSummary: decision.score_summary,
+          promptTokens: response.usage.prompt_tokens,
+          completionTokens: response.usage.completion_tokens,
+          totalTokens: response.usage.total_tokens,
+          subtotalUsd: cost.subtotal_usd,
+          platformFeeUsd: cost.platform_fee_usd,
+          totalUsd: cost.total_usd,
+          quoteId: challengePayload.quote_id,
+          chain: paymentProof.chain,
+          asset: challengePayload.asset,
+          payerAddress: paymentProof.payer_address,
+          latencyMs: response.latency_ms,
+        });
+
+        // Store idempotent result if key provided
+        const result = {
+          id: requestId,
+          object: "chat.completion",
+          created: Math.floor(Date.now() / 1000),
+          model: decision.selected_model,
+          choices: response.choices,
+          usage: response.usage,
+          usage_receipt: {
+            request_id: requestId,
+            quote_id: challengePayload.quote_id,
+            payer_address: paymentProof.payer_address,
+            routing_mode: body.routing_mode || "manual",
+            model_used: decision.selected_model,
+            unit_price_input_usd: cost.unit_price_input,
+            unit_price_output_usd: cost.unit_price_output,
+            total_cost_usd: cost.total_usd,
+            route_proof_hash: decision.route_proof_hash,
+          },
+        };
+
+        if (idempotencyKey) {
+          await services.replayService.saveIdempotency(
+            idempotencyKey,
+            result,
+            86400,
+          );
+        }
+
+        return reply.send(result);
+      } catch (routeError) {
+        // Mark trace as failed
+        await services.traceService.failTrace(
+          requestId,
+          routeError instanceof Error ? routeError.message : "Routing failed",
+        );
+        throw routeError;
+      }
     } catch (error) {
       if (error instanceof ChallengeExpiredError) {
         return reply.status(402).send(errorToResponse(error));
@@ -119,7 +215,6 @@ export function registerRoutes(
 
   app.get("/v1/audit/requests/:request_id", async (request, reply) => {
     const { request_id } = request.params as { request_id: string };
-
 
     const auditRecord = await services.receiptService.getByRequestId(
       request_id as import("../types.js").RequestId,
