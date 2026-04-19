@@ -1,13 +1,7 @@
 import Fastify from "fastify";
 import { registerRoutes } from "../src/gateway/routes.js";
-import {
-  createProviderRegistry,
-  type IProviderRegistry,
-} from "../src/provider/registry.js";
-import {
-  createChallengeService,
-  type IChallengeService,
-} from "../src/x402/challenge.service.js";
+import { createProviderRegistry } from "../src/provider/registry.js";
+import { createChallengeService } from "../src/x402/challenge.service.js";
 import {
   createPaymentVerifyService,
   type IPaymentVerifyService,
@@ -20,32 +14,13 @@ import {
   createRouterService,
   type IRouterService,
 } from "../src/router/router.service.js";
-import {
-  createMeterService,
-  type IMeterService,
-} from "../src/billing/meter.service.js";
-import {
-  createCostService,
-  type ICostService,
-} from "../src/billing/cost.service.js";
-import {
-  createLedgerService,
-  type ILedgerService,
-} from "../src/billing/ledger.service.js";
-import {
-  createTraceService,
-  type ITraceService,
-} from "../src/audit/trace.service.js";
-import {
-  createReceiptService,
-  type IReceiptService,
-} from "../src/audit/receipt.service.js";
+import { createMeterService } from "../src/billing/meter.service.js";
+import { createCostService } from "../src/billing/cost.service.js";
+import { createLedgerService } from "../src/billing/ledger.service.js";
+import { createTraceService } from "../src/audit/trace.service.js";
+import { createReceiptService } from "../src/audit/receipt.service.js";
 import type { ServiceContainer } from "../src/app.js";
-import type {
-  ChatCompletionRequest,
-  RoutingMode,
-  UsageReceipt,
-} from "../src/types.js";
+import type { ChatCompletionRequest, RoutingMode } from "../src/types.js";
 import type {
   ChallengePayload,
   PaymentProof,

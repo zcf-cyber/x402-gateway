@@ -1,11 +1,9 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect } from "vitest";
 import {
-  buildTestApp,
   buildMockedTestApp,
   createMockPaymentProof,
   encodePaymentProof,
 } from "../helpers.js";
-import { PaymentReplayedError } from "../../src/errors.js";
 
 describe("End-to-End Integration Flow", () => {
   describe("Complete Payment Flow", () => {
@@ -240,7 +238,7 @@ describe("End-to-End Integration Flow", () => {
     });
 
     it("should reject replayed payment (double spend protection)", async () => {
-      const { app, services } = buildMockedTestApp();
+      const { app } = buildMockedTestApp();
 
       // Get challenge
       const challengeResponse = await app.inject({
@@ -355,7 +353,7 @@ describe("End-to-End Integration Flow", () => {
     });
 
     it("should reject mismatched request hash", async () => {
-      const { app, services } = buildMockedTestApp();
+      const { app } = buildMockedTestApp();
 
       // Get challenge for one request
       const challengeResponse = await app.inject({
@@ -474,7 +472,7 @@ describe("End-to-End Integration Flow", () => {
 
   describe("Audit Endpoint", () => {
     it("should return complete audit record for successful request", async () => {
-      const { app, services } = buildMockedTestApp();
+      const { app } = buildMockedTestApp();
 
       // Get challenge
       const challengeResponse = await app.inject({
@@ -561,7 +559,7 @@ describe("End-to-End Integration Flow", () => {
 
   describe("Auto Routing Mode", () => {
     it("should support auto routing mode", async () => {
-      const { app, services } = buildMockedTestApp();
+      const { app } = buildMockedTestApp();
 
       // Get challenge with auto routing
       const challengeResponse = await app.inject({
