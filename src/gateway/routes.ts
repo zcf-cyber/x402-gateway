@@ -117,12 +117,25 @@ export function registerRoutes(
     return reply.send({ data: services.providerRegistry.listModels() });
   });
 
-  app.get("/v1/audit/requests/:request_id", async (_request, reply) => {
-    return reply.status(501).send({
-      error: {
-        code: "internal_error",
-        message: "Audit query not yet implemented",
-      },
+  app.get("/v1/audit/requests/:request_id", async (request, reply) => {
+    const { request_id } = request.params as { request_id: string };
+
+
+    const auditRecord = await services.receiptService.getByRequestId(
+      request_id as import("../types.js").RequestId,
+    );
+
+    if (!auditRecord) {
+      return reply.status(404).send({
+        error: {
+          code: "not_found",
+          message: `Request ${request_id} not found or incomplete`,
+        },
+      });
+    }
+
+    return reply.send({
+      data: auditRecord,
     });
   });
 }
