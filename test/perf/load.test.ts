@@ -156,15 +156,14 @@ describe("Performance Load Tests", () => {
           latencies.reduce((a, b) => a + b, 0) / latencies.length;
         const minLatency = Math.min(...latencies);
         const maxLatency = Math.max(...latencies);
-        const p50Latency = latencies.sort((a, b) => a - b)[
-          Math.floor(latencies.length * 0.5)
-        ];
-        const p95Latency = latencies.sort((a, b) => a - b)[
-          Math.floor(latencies.length * 0.95)
-        ];
-        const p99Latency = latencies.sort((a, b) => a - b)[
-          Math.floor(latencies.length * 0.99)
-        ];
+        // Sort once for all percentile calculations (fix: avoid repeated sorting)
+        const sortedLatencies = [...latencies].sort((a, b) => a - b);
+        const p50Latency =
+          sortedLatencies[Math.floor(sortedLatencies.length * 0.5)];
+        const p95Latency =
+          sortedLatencies[Math.floor(sortedLatencies.length * 0.95)];
+        const p99Latency =
+          sortedLatencies[Math.floor(sortedLatencies.length * 0.99)];
 
         // Log performance metrics
         console.log("\n========== Performance Test Results ==========");
@@ -311,9 +310,19 @@ describe("Performance Load Tests", () => {
     it(
       `should maintain idempotency consistency at ${IDEMPOTENCY_RPS} RPS`,
       async () => {
-        const { app } = buildMockedTestApp();
-        const usedIdempotencyKeys = new Set<string>();
-        const results: { success: boolean; isDuplicate: boolean }[] = [];
+        // Fix: Get services to verify server-side idempotency (ledger entries)
+        const { app, services } = buildMockedTestApp();
+
+        // Track idempotency key info: request_id and ledger verification status
+        const idempotencyKeyInfo = new Map<
+          string,
+          { requestId: string; ledgerVerified: boolean }
+        >();
+        const results: {
+          success: boolean;
+          isDuplicate: boolean;
+          requestIdMatch?: boolean;
+        }[] = [];
 
         const startTime = Date.now();
         let requestCount = 0;
@@ -365,15 +374,38 @@ describe("Performance Load Tests", () => {
               },
             });
 
-            const isDuplicate = usedIdempotencyKeys.has(idempotencyKey);
-            if (!isDuplicate) {
-              usedIdempotencyKeys.add(idempotencyKey);
-            }
+            if (response.statusCode === 200) {
+              const body = response.json();
+              const requestId = body.usage_receipt.request_id;
 
-            results.push({
-              success: response.statusCode === 200,
-              isDuplicate,
-            });
+              // Check if this is a duplicate request
+              const isDuplicate = idempotencyKeyInfo.has(idempotencyKey);
+
+              if (!isDuplicate) {
+                // First request: store request_id for later comparison
+                idempotencyKeyInfo.set(idempotencyKey, {
+                  requestId,
+                  ledgerVerified: false,
+                });
+              } else {
+                // Duplicate request: verify request_id matches first request
+                const firstRequestInfo =
+                  idempotencyKeyInfo.get(idempotencyKey)!;
+                results.push({
+                  success: true,
+                  isDuplicate: true,
+                  requestIdMatch: requestId === firstRequestInfo.requestId,
+                });
+                continue;
+              }
+
+              results.push({
+                success: true,
+                isDuplicate: false,
+              });
+            } else {
+              results.push({ success: false, isDuplicate: false });
+            }
           } catch {
             results.push({ success: false, isDuplicate: false });
           }
@@ -386,16 +418,43 @@ describe("Performance Load Tests", () => {
           }
         }
 
+        // Verify server-side idempotency
+        // Fix: Verify that duplicate requests return the same request_id
+        const duplicateResults = results.filter((r) => r.isDuplicate);
+        const allDuplicatesMatch = duplicateResults.every(
+          (r) => r.requestIdMatch === true,
+        );
+
+        // Fix: Verify ledger entries for idempotency keys
+        let ledgerCount = 0;
+        for (const [_, info] of idempotencyKeyInfo) {
+          const ledgerEntry = await services.ledgerService.getByRequestId(
+            info.requestId,
+          );
+          if (ledgerEntry) {
+            ledgerCount++;
+          }
+        }
+
         const successfulRequests = results.filter((r) => r.success).length;
-        const duplicateRequests = results.filter(
-          (r) => r.isDuplicate && r.success,
-        ).length;
+        const duplicateRequests = duplicateResults.length;
 
         console.log("\n========== Idempotency Test Results ==========");
         console.log(`Total Requests: ${results.length}`);
         console.log(`Successful: ${successfulRequests}`);
-        console.log(`Duplicates Served: ${duplicateRequests}`);
+        console.log(`First-time Requests: ${idempotencyKeyInfo.size}`);
+        console.log(`Duplicate Requests: ${duplicateRequests}`);
+        console.log(`All Duplicate request_id Match: ${allDuplicatesMatch}`);
+        console.log(`Ledger Entries Created: ${ledgerCount}`);
         console.log("==============================================\n");
+
+        // Fix: Verify all duplicate requests have matching request_id
+        if (duplicateResults.length > 0) {
+          expect(allDuplicatesMatch).toBe(true);
+        }
+
+        // Fix: Verify ledger has correct number of entries (one per unique idempotency key)
+        expect(ledgerCount).toBe(idempotencyKeyInfo.size);
 
         // All requests should succeed (including duplicates)
         expect(successfulRequests).toBe(results.length);
