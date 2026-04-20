@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect } from "vitest";
 import {
   buildMockedTestApp,
   createMockPaymentProof,
@@ -39,12 +39,6 @@ describe("Performance Load Tests", () => {
         const maxRequests = Math.floor(
           (TEST_DURATION_MS / 1000) * TARGET_RPS * 1.1,
         ); // Allow 10% buffer
-
-        // Track challenge tokens and payment proofs for each request
-        const requestData: Map<
-          number,
-          { challengeToken: string; paymentHeader: string }
-        > = new Map();
 
         // Send requests at target RPS rate
         while (
@@ -427,7 +421,7 @@ describe("Performance Load Tests", () => {
 
         // Fix: Verify ledger entries for idempotency keys
         let ledgerCount = 0;
-        for (const [_, info] of idempotencyKeyInfo) {
+        for (const info of idempotencyKeyInfo.values()) {
           const ledgerEntry = await services.ledgerService.getByRequestId(
             info.requestId,
           );
