@@ -108,12 +108,10 @@ export function registerRoutes(
           response,
         );
 
-        // Get pricing and calculate cost
-        const pricing = {
-          input_usd_per_token: "0.00001", // $0.01 per 1K tokens
-          output_usd_per_token: "0.00002", // $0.02 per 1K tokens
-          effective_at: new Date().toISOString(),
-        };
+        // Get pricing from provider registry and calculate cost
+        const pricing = services.providerRegistry.getModelPricing(
+          decision.selected_model,
+        );
         const usage = {
           request_id: requestId,
           model_id: decision.selected_model,
