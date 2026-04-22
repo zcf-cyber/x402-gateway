@@ -159,6 +159,19 @@ export async function buildApp(config: Config) {
   const ledgerService = createLedgerService();
   const traceService = createTraceService();
 
+  /**
+   * In-memory usage store for MVP stage.
+   * Production environment must migrate to PostgreSQL for persistence.
+   */
+  const usageStore = new Map<string, {
+    request_id: string;
+    model_id: string;
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+    created_at: string;
+  }>();
+
   const services: ServiceContainer = {
     providerRegistry,
     challengeService: createChallengeService({
@@ -172,7 +185,24 @@ export async function buildApp(config: Config) {
     replayService: createReplayProtectionService(new InMemoryRedis()),
     routerService: createRouterService({ providerRegistry }),
     meterService: createMeterService({
-      recordUsage: async () => {}, // TODO: Integrate with database layer
+      recordUsage: async (
+        requestId: string,
+        modelId: string,
+        promptTokens: number,
+        completionTokens: number,
+        totalTokens: number,
+      ) => {
+        // Temporary implementation: store in memory Map
+        // Production environment must migrate to PostgreSQL
+        usageStore.set(requestId, {
+          request_id: requestId,
+          model_id: modelId,
+          prompt_tokens: promptTokens,
+          completion_tokens: completionTokens,
+          total_tokens: totalTokens,
+          created_at: new Date().toISOString(),
+        });
+      },
     }),
     costService: createCostService(),
     ledgerService,

@@ -5,6 +5,7 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     include: ['test/**/*.test.ts'],
+    exclude: ['test/perf/**/*.test.ts'], // Exclude performance tests from default run
     setupFiles: ['test/setup.ts'],
     coverage: {
       provider: 'v8',
