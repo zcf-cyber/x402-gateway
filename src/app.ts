@@ -3,6 +3,43 @@ import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
 import sensible from "@fastify/sensible";
+
+/**
+ * In-memory Redis-compatible store for MVP stage.
+ * Production environment must migrate to Redis for persistence.
+ */
+class InMemoryRedis {
+  private store = new Map<string, { value: string; expireAt?: number }>();
+
+  async set(
+    key: string,
+    value: string,
+    _exOrPx?: string,
+    ms?: number,
+    nx?: string,
+  ): Promise<string | null> {
+    if (nx === "NX" && this.store.has(key)) {
+      return null;
+    }
+    const expireAt = ms ? Date.now() + ms : undefined;
+    this.store.set(key, { value, expireAt });
+    return "OK";
+  }
+
+  async get(key: string): Promise<string | null> {
+    const item = this.store.get(key);
+    if (!item) return null;
+    if (item.expireAt && Date.now() > item.expireAt) {
+      this.store.delete(key);
+      return null;
+    }
+    return item.value;
+  }
+
+  async del(key: string): Promise<number> {
+    return this.store.delete(key) ? 1 : 0;
+  }
+}
 import type { Config } from "./config.js";
 import { AppError, errorToResponse } from "./errors.js";
 import { traceIdHook } from "./gateway/middleware.js";
@@ -107,7 +144,7 @@ export async function buildApp(config: Config) {
       paymentAsset: config.paymentAsset,
     }),
     verifyService: createPaymentVerifyService(config.evmRpcUrl),
-    replayService: createReplayProtectionService(null as never),
+    replayService: createReplayProtectionService(new InMemoryRedis()),
     routerService: createRouterService({ providerRegistry }),
     meterService: createMeterService({
       recordUsage: async () => {}, // TODO: Integrate with database layer

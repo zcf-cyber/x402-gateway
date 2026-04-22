@@ -277,23 +277,35 @@ describe("RouterService", () => {
       const service = createRouterService({ providerRegistry: registry });
 
       const openaiResult = await service.route(
-        { model: "openai/gpt-4o", messages: [{ role: "user", content: "Hello" }] },
+        {
+          model: "openai/gpt-4o",
+          messages: [{ role: "user", content: "Hello" }],
+        },
         "manual",
       );
       expect(openaiResult.decision.selected_model).toBe("openai/gpt-4o");
-      expect(openaiResult.response.choices[0].message.content).toBe("OpenAI response");
+      expect(openaiResult.response.choices[0].message.content).toBe(
+        "OpenAI response",
+      );
 
       const anthropicResult = await service.route(
-        { model: "anthropic/claude-3-opus", messages: [{ role: "user", content: "Hello" }] },
+        {
+          model: "anthropic/claude-3-opus",
+          messages: [{ role: "user", content: "Hello" }],
+        },
         "manual",
       );
-      expect(anthropicResult.decision.selected_model).toBe("anthropic/claude-3-opus");
-      expect(anthropicResult.response.choices[0].message.content).toBe("Anthropic response");
+      expect(anthropicResult.decision.selected_model).toBe(
+        "anthropic/claude-3-opus",
+      );
+      expect(anthropicResult.response.choices[0].message.content).toBe(
+        "Anthropic response",
+      );
     });
   });
 
   describe("auto routing mode", () => {
-    it("route should throw for auto mode (not yet implemented)", async () => {
+    it("route should throw when no models available for auto mode", async () => {
       const registry = createProviderRegistry();
       const service = createRouterService({ providerRegistry: registry });
       const request: ChatCompletionRequest = {
@@ -301,8 +313,62 @@ describe("RouterService", () => {
         messages: [{ role: "user", content: "hello" }],
       };
 
+      // When no models are registered, auto mode should throw "Not implemented"
       await expect(service.route(request, "auto")).rejects.toThrow(
-        "Auto routing mode not yet implemented",
+        "Not implemented",
+      );
+    });
+
+    it("should route via auto mode when models are available", async () => {
+      const registry = createProviderRegistry();
+      const expectedResponse: UpstreamResponse = {
+        model_used: "openai/gpt-3.5-turbo",
+        choices: [
+          {
+            index: 0,
+            message: { role: "assistant", content: "Auto routed response" },
+            finish_reason: "stop",
+          },
+        ],
+        usage: {
+          prompt_tokens: 10,
+          completion_tokens: 5,
+          total_tokens: 15,
+        },
+        latency_ms: 100,
+      };
+
+      const mockAdapter = new MockOpenAIAdapter(expectedResponse);
+
+      // Register a cheaper model (will be selected by auto mode)
+      registry.register("openai/gpt-3.5-turbo", mockAdapter, {
+        input_usd_per_token: "0.000005",
+        output_usd_per_token: "0.000015",
+        effective_at: new Date().toISOString(),
+      });
+
+      // Register an expensive model (fallback option)
+      registry.register("openai/gpt-4o", mockAdapter, {
+        input_usd_per_token: "0.00001",
+        output_usd_per_token: "0.00003",
+        effective_at: new Date().toISOString(),
+      });
+
+      const service = createRouterService({ providerRegistry: registry });
+      const request: ChatCompletionRequest = {
+        model: "gpt-4",
+        messages: [{ role: "user", content: "hello" }],
+      };
+
+      const result = await service.route(request, "auto");
+
+      // Auto mode should select the cheaper model
+      expect(result.decision.selected_model).toBe("openai/gpt-3.5-turbo");
+      expect(result.decision.score_summary).toContain("auto-selected");
+      expect(result.decision.route_proof_hash).toMatch(/^rph_/);
+      expect(result.decision.fallback_chain).toContain("openai/gpt-4o");
+      expect(result.response.choices[0].message.content).toBe(
+        "Auto routed response",
       );
     });
   });
@@ -325,7 +391,9 @@ describe("RouterService", () => {
         messages: [{ role: "user", content: "Hello" }],
       };
 
-      await expect(service.route(request, "manual")).rejects.toThrow("Provider is down");
+      await expect(service.route(request, "manual")).rejects.toThrow(
+        "Provider is down",
+      );
     });
 
     it("should handle empty messages", async () => {
@@ -410,7 +478,10 @@ describe("FallbackService", () => {
       };
 
       await expect(
-        service.executeWithFallback(["model-1", "model-2", "model-3"], executeFn),
+        service.executeWithFallback(
+          ["model-1", "model-2", "model-3"],
+          executeFn,
+        ),
       ).rejects.toThrow();
 
       expect(attemptedModels).toEqual(["model-1", "model-2", "model-3"]);
@@ -430,7 +501,11 @@ describe("FallbackService", () => {
                 finish_reason: "stop",
               },
             ],
-            usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+            usage: {
+              prompt_tokens: 10,
+              completion_tokens: 5,
+              total_tokens: 15,
+            },
             latency_ms: 100,
           };
         }
@@ -449,9 +524,9 @@ describe("FallbackService", () => {
 
   describe("edge cases", () => {
     it("should handle empty fallback chain", async () => {
-      await expect(service.executeWithFallback([], async () => ({}) as never)).rejects.toThrow(
-        "All models in fallback chain failed",
-      );
+      await expect(
+        service.executeWithFallback([], async () => ({}) as never),
+      ).rejects.toThrow("All models in fallback chain failed");
     });
 
     it("should handle single model success", async () => {
@@ -468,7 +543,10 @@ describe("FallbackService", () => {
         latency_ms: 100,
       });
 
-      const result = await service.executeWithFallback(["single-model"], executeFn);
+      const result = await service.executeWithFallback(
+        ["single-model"],
+        executeFn,
+      );
       expect(result.modelId).toBe("single-model");
     });
 
@@ -503,7 +581,9 @@ describe("PolicyEngine", () => {
     });
 
     it("should select the only candidate", () => {
-      const candidates: RouteCandidate[] = [{ model_id: "model-a", score: 1.0, reason: "test" }];
+      const candidates: RouteCandidate[] = [
+        { model_id: "model-a", score: 1.0, reason: "test" },
+      ];
       const result = engine.selectBest(candidates);
       expect(result.model_id).toBe("model-a");
     });
@@ -587,7 +667,10 @@ describe("Router + ProviderRegistry Integration", () => {
 
     const router = createRouterService({ providerRegistry: registry });
     const result = await router.route(
-      { model: "openai/gpt-4o", messages: [{ role: "user", content: "Hello" }] },
+      {
+        model: "openai/gpt-4o",
+        messages: [{ role: "user", content: "Hello" }],
+      },
       "manual",
     );
 
