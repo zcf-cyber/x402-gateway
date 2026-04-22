@@ -645,7 +645,7 @@ describe("End-to-End Integration Flow", () => {
   });
 
   describe("Model Catalog", () => {
-    it("should return empty model catalog", async () => {
+    it("should return registered models", async () => {
       const { app } = buildMockedTestApp();
 
       const response = await app.inject({
@@ -656,7 +656,9 @@ describe("End-to-End Integration Flow", () => {
       expect(response.statusCode).toBe(200);
       const body = response.json();
       expect(body).toHaveProperty("data");
-      expect(body.data).toEqual([]);
+      expect(body.data.length).toBeGreaterThan(0);
+      expect(body.data[0]).toHaveProperty("id");
+      expect(body.data[0]).toHaveProperty("pricing");
     });
   });
 });

@@ -1,6 +1,7 @@
 import Fastify from "fastify";
 import { registerRoutes } from "../src/gateway/routes.js";
 import { createProviderRegistry } from "../src/provider/registry.js";
+import { OpenAIAdapter } from "../src/provider/openai.adapter.js";
 import { createChallengeService } from "../src/x402/challenge.service.js";
 import {
   createPaymentVerifyService,
@@ -149,6 +150,14 @@ export function buildTestApp(overrides: Partial<ServiceContainer> = {}) {
   const app = Fastify({ logger: false });
 
   const providerRegistry = createProviderRegistry();
+
+  // Register test models with pricing
+  providerRegistry.register("openai/gpt-4o", new OpenAIAdapter("test-key"), {
+    input_usd_per_token: "0.00001",
+    output_usd_per_token: "0.00003",
+    effective_at: new Date().toISOString(),
+  });
+
   const ledgerService = createLedgerService();
   const traceService = createTraceService();
 
@@ -190,6 +199,14 @@ export function buildMockedTestApp(options?: {
   routerLatencyMs?: number;
 }): { app: ReturnType<typeof buildTestApp>; services: ServiceContainer } {
   const providerRegistry = createProviderRegistry();
+
+  // Register test models with pricing
+  providerRegistry.register("openai/gpt-4o", new OpenAIAdapter("test-key"), {
+    input_usd_per_token: "0.00001",
+    output_usd_per_token: "0.00003",
+    effective_at: new Date().toISOString(),
+  });
+
   const ledgerService = createLedgerService();
   const traceService = createTraceService();
   const replayService = createMockReplayService();
