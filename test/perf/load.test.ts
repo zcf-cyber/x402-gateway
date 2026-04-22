@@ -160,24 +160,41 @@ describe("Performance Load Tests", () => {
           sortedLatencies[Math.floor(sortedLatencies.length * 0.99)];
 
         // Log performance metrics
+        // eslint-disable-next-line no-console
         console.log("\n========== Performance Test Results ==========");
+        // eslint-disable-next-line no-console
         console.log(`Duration: ${(Date.now() - startTime) / 1000}s`);
+        // eslint-disable-next-line no-console
         console.log(`Total Requests: ${totalRequests}`);
+        // eslint-disable-next-line no-console
         console.log(`Successful Requests: ${successfulRequests}`);
+        // eslint-disable-next-line no-console
         console.log(`Failed Requests: ${failedRequests}`);
+        // eslint-disable-next-line no-console
         console.log(`Error Rate: ${(errorRate * 100).toFixed(2)}%`);
+        // eslint-disable-next-line no-console
         console.log(`Target Error Rate: <${MAX_ERROR_RATE * 100}%`);
+        // eslint-disable-next-line no-console
         console.log(`\nLatency Metrics:`);
+        // eslint-disable-next-line no-console
         console.log(`  Min: ${minLatency}ms`);
+        // eslint-disable-next-line no-console
         console.log(`  Avg: ${avgLatency.toFixed(2)}ms`);
+        // eslint-disable-next-line no-console
         console.log(`  Max: ${maxLatency}ms`);
+        // eslint-disable-next-line no-console
         console.log(`  P50: ${p50Latency}ms`);
+        // eslint-disable-next-line no-console
         console.log(`  P95: ${p95Latency}ms`);
+        // eslint-disable-next-line no-console
         console.log(`  P99: ${p99Latency}ms`);
+        // eslint-disable-next-line no-console
         console.log(`Target RPS: ${TARGET_RPS}`);
+        // eslint-disable-next-line no-console
         console.log(
           `Actual RPS: ${(totalRequests / ((Date.now() - startTime) / 1000)).toFixed(2)}`,
         );
+        // eslint-disable-next-line no-console
         console.log("==============================================\n");
 
         // Assertions
@@ -281,12 +298,19 @@ describe("Performance Load Tests", () => {
         const avgLatency =
           results.reduce((a, r) => a + r.latencyMs, 0) / totalRequests;
 
+        // eslint-disable-next-line no-console
         console.log("\n========== Burst Test Results ==========");
+        // eslint-disable-next-line no-console
         console.log(`Duration: ${BURST_DURATION_MS / 1000}s`);
+        // eslint-disable-next-line no-console
         console.log(`Total Requests: ${totalRequests}`);
+        // eslint-disable-next-line no-console
         console.log(`Successful: ${successfulRequests}`);
+        // eslint-disable-next-line no-console
         console.log(`Error Rate: ${(errorRate * 100).toFixed(2)}%`);
+        // eslint-disable-next-line no-console
         console.log(`Avg Latency: ${avgLatency.toFixed(2)}ms`);
+        // eslint-disable-next-line no-console
         console.log("========================================\n");
 
         expect(totalRequests).toBeGreaterThan(0);
@@ -433,13 +457,21 @@ describe("Performance Load Tests", () => {
         const successfulRequests = results.filter((r) => r.success).length;
         const duplicateRequests = duplicateResults.length;
 
+        // eslint-disable-next-line no-console
         console.log("\n========== Idempotency Test Results ==========");
+        // eslint-disable-next-line no-console
         console.log(`Total Requests: ${results.length}`);
+        // eslint-disable-next-line no-console
         console.log(`Successful: ${successfulRequests}`);
+        // eslint-disable-next-line no-console
         console.log(`First-time Requests: ${idempotencyKeyInfo.size}`);
+        // eslint-disable-next-line no-console
         console.log(`Duplicate Requests: ${duplicateRequests}`);
+        // eslint-disable-next-line no-console
         console.log(`All Duplicate request_id Match: ${allDuplicatesMatch}`);
+        // eslint-disable-next-line no-console
         console.log(`Ledger Entries Created: ${ledgerCount}`);
+        // eslint-disable-next-line no-console
         console.log("==============================================\n");
 
         // Fix: Verify all duplicate requests have matching request_id

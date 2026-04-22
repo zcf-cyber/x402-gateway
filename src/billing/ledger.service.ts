@@ -129,7 +129,10 @@ export function createLedgerService(deps?: Partial<LedgerServiceDeps>): ILedgerS
     log,
   } = deps || {};
 
-  // In-memory storage for testing (will be replaced with database in production)
+  /**
+   * In-memory storage for MVP stage.
+   * Production environment must migrate to PostgreSQL for persistence.
+   */
   const ledgerStore = new Map<string, LedgerEntry>();
   const requestIndex = new Map<string, string>(); // request_id -> entry_id
   const quoteIndex = new Map<string, string>();   // quote_id -> entry_id
