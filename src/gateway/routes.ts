@@ -229,8 +229,6 @@ export function registerRoutes(
       });
     }
 
-    return reply.send({
-      data: auditRecord,
-    });
+    return reply.send(auditRecord);
   });
 }
