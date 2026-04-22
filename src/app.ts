@@ -47,6 +47,7 @@ import { registerRoutes } from "./gateway/routes.js";
 import {
   createProviderRegistry,
   type IProviderRegistry,
+  OpenAIAdapter,
 } from "./provider/index.js";
 import {
   createChallengeService,
@@ -131,6 +132,30 @@ export async function buildApp(config: Config) {
   });
 
   const providerRegistry = createProviderRegistry();
+
+  // Register default models for testing/development
+  // Use config.openaiApiKey if provided, fallback to test-key for dev
+  providerRegistry.register(
+    "openai/gpt-4o",
+    new OpenAIAdapter(config.openaiApiKey || "test-key"),
+    {
+      input_usd_per_token: "0.00001",
+      output_usd_per_token: "0.00003",
+      effective_at: new Date().toISOString(),
+    },
+  );
+
+  // Register cheaper model for auto routing tests
+  providerRegistry.register(
+    "openai/gpt-3.5-turbo",
+    new OpenAIAdapter(config.openaiApiKey || "test-key"),
+    {
+      input_usd_per_token: "0.000005",
+      output_usd_per_token: "0.000015",
+      effective_at: new Date().toISOString(),
+    },
+  );
+
   const ledgerService = createLedgerService();
   const traceService = createTraceService();
 

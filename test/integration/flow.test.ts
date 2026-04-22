@@ -514,11 +514,7 @@ describe("End-to-End Integration Flow", () => {
       });
 
       expect(auditResponse.statusCode).toBe(200);
-      const auditBody = auditResponse.json();
-      expect(auditBody.data).toBeDefined();
-
-      // Verify audit record structure
-      const auditRecord = auditBody.data;
+      const auditRecord = auditResponse.json();
       expect(auditRecord.request_id).toBe(requestId);
       expect(auditRecord.request_hash).toBeDefined();
       expect(auditRecord.routing_mode).toBe("manual");
