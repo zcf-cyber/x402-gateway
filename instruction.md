@@ -1,8 +1,9 @@
 # x402 Gateway 部署指南
 
 **版本**: v0.1.0  
-**最后更新**: 2026-04-20  
-**目标环境**: 测试网 (Base Sepolia) + 生产服务器
+**最后更新**: 2026-04-22  
+**目标环境**: 测试网 (Base Sepolia) + 生产服务器  
+**⚠️ 重要提示**: 当前为 MVP 阶段，所有数据存储在内存中（重启后数据丢失），PostgreSQL 集成尚未完成。
 
 ---
 
@@ -26,8 +27,8 @@
 
 - **Node.js**: >= 20.0.0 (推荐 v20.20.1 LTS)
 - **pnpm**: >= 8.0.0
-- **PostgreSQL**: >= 14.0
-- **Redis**: >= 6.2
+- **PostgreSQL**: >= 14.0（预留，MVP 阶段使用内存存储）
+- **Redis**: >= 6.2（预留，MVP 阶段使用内存 Map）
 - **Docker** & **Docker Compose** (可选，用于快速部署)
 - **Git**: >= 2.30
 
@@ -63,12 +64,7 @@ npm install -g pnpm
 2. 连接钱包（MetaMask）
 3. 请求测试 ETH（用于 gas 费）
 
-或者使用 Alchemy Faucet:
-```bash
-curl -X POST https://base-sepolia.g.alchemy.com/v2/demo \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","method":"eth_requestAccounts","params":[],"id":1}'
-```
+或者使用 [Alchemy Faucet](https://www.alchemy.com/faucets/ethereum-sepolia)（需要 Alchemy 账号）。
 
 #### 步骤3: 配置 MetaMask 添加 Base Sepolia
 
@@ -187,10 +183,10 @@ HOST=0.0.0.0
 NODE_ENV=production
 LOG_LEVEL=info
 
-# === 数据库配置 ===
+# === 数据库配置（MVP 阶段预留，当前使用内存存储）===
 DATABASE_URL=postgresql://gateway_user:your_secure_password@localhost:5432/x402_gateway
 
-# === Redis 配置 ===
+# === Redis 配置（MVP 阶段预留，当前使用内存 Map）===
 REDIS_URL=redis://localhost:6379
 
 # === x402 支付配置 ===
@@ -220,10 +216,10 @@ PLATFORM_FEE_BPS=500
 - 使用 `openssl rand -hex 32` 生成强随机密钥
 - 生产环境使用密钥管理服务（如 AWS Secrets Manager）
 
-### 4.4 初始化数据库
+### 4.4 启动依赖服务（可选）
 
 ```bash
-# 如果使用 Docker Compose（推荐）
+# 如需本地 PostgreSQL 和 Redis 进行开发测试
 docker compose up -d
 
 # 验证服务运行
@@ -231,16 +227,7 @@ docker compose ps
 # 应显示 PostgreSQL 和 Redis 容器运行中
 ```
 
-如果使用本地数据库，运行迁移脚本（如果有）：
-
-```bash
-# 检查是否有迁移脚本
-ls -la migrations/
-
-# 运行迁移（根据实际迁移工具调整）
-# 示例使用 kysely:
-# npx kysely migrate:latest
-```
+**注意**: MVP 阶段应用使用内存存储，上述服务为预留基础设施。数据在应用重启后会丢失。
 
 ### 4.5 运行测试
 
@@ -308,14 +295,14 @@ pm2 logs x402-gateway
 pm2 monit
 ```
 
-### 5.4 使用 Docker Compose（推荐）
+### 5.4 使用 Docker Compose（仅依赖服务）
 
 ```bash
-# 启动所有服务（PostgreSQL + Redis + Gateway）
+# 启动基础设施服务（PostgreSQL + Redis）
 docker compose up -d
 
-# 查看日志
-docker compose logs -f gateway
+# 查看基础设施日志
+docker compose logs -f
 
 # 停止服务
 docker compose down
@@ -323,6 +310,8 @@ docker compose down
 # 完全清理（包括数据卷）
 docker compose down -v
 ```
+
+**注意**: docker-compose.yml 目前仅包含 PostgreSQL 和 Redis。Gateway 应用需要单独启动（见 5.2 或 5.3）。
 
 ---
 
@@ -484,7 +473,7 @@ journalctl -u x402-gateway -f
 
 ```bash
 # 使用 autocannon 进行负载测试
-npm install -g autocom cannon
+npm install -g autocannon
 
 # 测试 20 RPS，持续 60 秒
 autocannon -c 20 -d 60 -m POST \
@@ -643,7 +632,7 @@ docker compose restart gateway
 
 如遇问题，请：
 
-1. 查看 `CODE_REVIEW_REPORT.md` 了解已知问题
+1. 查看 GitHub Issues 了解已知问题
 2. 查看 GitHub Issues: https://github.com/zcf-cyber/x402-gateway/issues
 3. 创建新的 Issue 报告问题
 
@@ -653,7 +642,7 @@ docker compose restart gateway
 
 - [ ] 系统要求满足
 - [ ] Base Sepolia 测试网配置完成
-- [ ] PostgreSQL 和 Redis 运行正常
+- [ ] PostgreSQL 和 Redis 运行正常（可选，MVP 阶段使用内存存储）
 - [ ] 环境变量正确配置
 - [ ] 测试全部通过
 - [ ] 服务启动成功
