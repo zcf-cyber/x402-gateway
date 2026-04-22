@@ -58,9 +58,59 @@ export function createRouterService(deps: {
         return { decision, response };
       }
 
-      // Auto mode: P1 phase not yet implemented
-      // P3 will implement: PolicyEngine scoring + FallbackService execution
-      throw new Error("Auto routing mode not yet implemented");
+      // Auto mode: Use PolicyEngine + FallbackService
+      const { createPolicyEngine } = await import("./policy.js");
+      const policyEngine = createPolicyEngine({
+        getModelCatalog: () => providerRegistry.listModels(),
+        isModelAvailable: (modelId) => {
+          try {
+            providerRegistry.getAdapter(modelId);
+            return true;
+          } catch {
+            return false;
+          }
+        },
+      });
+
+      const context = {
+        requested_model: request.model,
+        routing_mode: "auto" as const,
+        available_models: providerRegistry.listModels().map((m) => m.id),
+      };
+
+      const { selected, fallbackChain } = policyEngine.decideAutoRoute(context);
+
+      // Use FallbackService to execute
+      const { createFallbackService } = await import("./fallback.service.js");
+      const fallbackService = createFallbackService();
+
+      const executeFn = (modelId: string) =>
+        providerRegistry.getAdapter(modelId).execute(request, modelId);
+
+      const result = await fallbackService.executeWithFallback(
+        [selected.model_id, ...fallbackChain],
+        executeFn,
+      );
+
+      // Build RouteDecision
+      const decision: RouteDecision = {
+        selected_model: result.modelId,
+        fallback_chain: fallbackChain,
+        score_summary: `auto-selected: ${selected.reason}`,
+        route_proof_hash: "", // Will be computed below
+      };
+
+      // Generate route_proof_hash
+      const hashInput = JSON.stringify({
+        decision,
+        response: {
+          model_used: result.response.model_used,
+          usage: result.response.usage,
+        },
+      });
+      decision.route_proof_hash = `rph_${createHash("sha256").update(hashInput).digest("hex")}`;
+
+      return { decision, response: result.response };
     },
   };
 }
