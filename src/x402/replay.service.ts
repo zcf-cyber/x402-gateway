@@ -1,5 +1,19 @@
-import type { Redis } from "ioredis";
 import { PaymentReplayedError } from "../errors.js";
+
+/**
+ * Minimal Redis-like interface for replay protection.
+ * Compatible with ioredis Redis and InMemoryRedis implementations.
+ */
+export interface RedisLike {
+  set(
+    key: string,
+    value: string,
+    exOrPx?: string,
+    ms?: number,
+    nx?: string,
+  ): Promise<string | null>;
+  get(key: string): Promise<string | null>;
+}
 
 export interface IReplayProtectionService {
   checkAndMark(paymentProofHash: string, ttlSeconds: number): Promise<boolean>;
@@ -12,7 +26,7 @@ export interface IReplayProtectionService {
 }
 
 export function createReplayProtectionService(
-  redis: Redis,
+  redis: RedisLike,
 ): IReplayProtectionService {
   return {
     async checkAndMark(
