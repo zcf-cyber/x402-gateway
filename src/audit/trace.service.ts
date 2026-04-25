@@ -138,7 +138,10 @@ export interface ITraceService {
 export function createTraceService(deps?: TraceServiceDeps): ITraceService {
   const { log } = deps || {};
 
-  // In-memory storage for testing (will be replaced with database in production)
+  /**
+   * In-memory storage for MVP stage.
+   * Production environment must migrate to PostgreSQL for persistence.
+   */
   const traces = new Map<string, CompleteTrace>();
 
   return {
