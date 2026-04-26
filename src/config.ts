@@ -21,7 +21,11 @@ const configSchema = z.object({
   paymentAsset: z.string().default("USDC"),
 
   openaiApiKey: z.string().optional(),
+  openaiBaseUrl: z.string().url().optional(),
   anthropicApiKey: z.string().optional(),
+  anthropicBaseUrl: z.string().url().optional(),
+  minimaxApiKey: z.string().optional(),
+  minimaxBaseUrl: z.string().url().optional(),
 
   evmRpcUrl: z.string().url().default("https://mainnet.base.org"),
 
@@ -44,7 +48,11 @@ export function loadConfig(): Config {
     paymentChain: process.env["PAYMENT_CHAIN"],
     paymentAsset: process.env["PAYMENT_ASSET"],
     openaiApiKey: process.env["OPENAI_API_KEY"],
+    openaiBaseUrl: process.env["OPENAI_BASE_URL"],
     anthropicApiKey: process.env["ANTHROPIC_API_KEY"],
+    anthropicBaseUrl: process.env["ANTHROPIC_BASE_URL"],
+    minimaxApiKey: process.env["MINIMAX_API_KEY"],
+    minimaxBaseUrl: process.env["MINIMAX_BASE_URL"],
     platformFeeBps: process.env["PLATFORM_FEE_BPS"],
     evmRpcUrl: process.env["EVM_RPC_URL"],
   });

@@ -135,9 +135,11 @@ export async function buildApp(config: Config) {
 
   // Register default models for testing/development
   // Use config.openaiApiKey if provided, fallback to test-key for dev
+  // Register OpenAI models (supports custom baseUrl)
+  const openaiBaseUrl = config.openaiBaseUrl || "https://api.openai.com/v1";
   providerRegistry.register(
     "openai/gpt-4o",
-    new OpenAIAdapter(config.openaiApiKey || "test-key"),
+    new OpenAIAdapter(config.openaiApiKey || "test-key", openaiBaseUrl),
     {
       input_usd_per_token: "0.00001",
       output_usd_per_token: "0.00003",
@@ -148,13 +150,27 @@ export async function buildApp(config: Config) {
   // Register cheaper model for auto routing tests
   providerRegistry.register(
     "openai/gpt-3.5-turbo",
-    new OpenAIAdapter(config.openaiApiKey || "test-key"),
+    new OpenAIAdapter(config.openaiApiKey || "test-key", openaiBaseUrl),
     {
       input_usd_per_token: "0.000005",
       output_usd_per_token: "0.000015",
       effective_at: new Date().toISOString(),
     },
   );
+
+  // Register MiniMax models (OpenAI-compatible endpoint)
+  if (config.minimaxApiKey) {
+    const minimaxBaseUrl = config.minimaxBaseUrl || "https://api.minimaxi.com/v1";
+    providerRegistry.register(
+      "minimax/MiniMax-Text-01",
+      new OpenAIAdapter(config.minimaxApiKey, minimaxBaseUrl),
+      {
+        input_usd_per_token: "0.000001",
+        output_usd_per_token: "0.000008",
+        effective_at: new Date().toISOString(),
+      },
+    );
+  }
 
   const ledgerService = createLedgerService();
   const traceService = createTraceService();

@@ -224,7 +224,14 @@ describe("Simulation Environment", () => {
     let env: ReturnType<typeof buildSimulationEnvironment>;
 
     beforeEach(() => {
-      env = buildSimulationEnvironment();
+      const stableConfig = {
+        ...DEFAULT_SIMULATION_CONFIG,
+        providers: DEFAULT_SIMULATION_CONFIG.providers.map((p) => ({
+          ...p,
+          failureRate: 0,
+        })),
+      };
+      env = buildSimulationEnvironment(stableConfig);
       env.metrics.reset();
     });
 

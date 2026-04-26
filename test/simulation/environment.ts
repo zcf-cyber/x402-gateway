@@ -134,9 +134,11 @@ export function createSimulatedAdapter(
 export function createSimulatedVerifyService(options?: {
   latencyMs?: { min: number; max: number };
   failureRate?: number;
+  insufficientPaymentRate?: number;
 }) {
   const latencyMs = options?.latencyMs ?? { min: 50, max: 150 };
-  const failureRate = options?.failureRate ?? 0.01;
+  const failureRate = options?.failureRate ?? 0;
+  const insufficientPaymentRate = options?.insufficientPaymentRate ?? 0;
 
   return {
     verifyPayment: async (
@@ -156,8 +158,8 @@ export function createSimulatedVerifyService(options?: {
         );
       }
 
-      // Simulate insufficient payment (1% chance)
-      if (Math.random() < 0.01) {
+      // Simulate insufficient payment
+      if (Math.random() < insufficientPaymentRate) {
         throw new InsufficientPaymentError(challenge.amount, "0.0001");
       }
 
@@ -296,6 +298,19 @@ export function buildSimulationEnvironment(
   const providerRegistry = createProviderRegistry();
   const ledgerService = createLedgerService();
   const traceService = createTraceService();
+
+  // Register simulated providers in the registry for pricing lookups
+  for (const provider of config.providers) {
+    const adapter = createSimulatedAdapter(provider);
+    for (const model of provider.models) {
+      const modelId = `${provider.name}/${model}`;
+      providerRegistry.register(modelId, adapter, {
+        input_usd_per_token: "0.00001",
+        output_usd_per_token: "0.00003",
+        effective_at: new Date().toISOString(),
+      });
+    }
+  }
 
   // Track metrics
   let requestCount = 0;
