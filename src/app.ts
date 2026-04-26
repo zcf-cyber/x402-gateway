@@ -133,40 +133,115 @@ export async function buildApp(config: Config) {
 
   const providerRegistry = createProviderRegistry();
 
-  // Register default models for testing/development
-  // Use config.openaiApiKey if provided, fallback to test-key for dev
-  // Register OpenAI models (supports custom baseUrl)
-  const openaiBaseUrl = config.openaiBaseUrl || "https://api.openai.com/v1";
-  providerRegistry.register(
-    "openai/gpt-4o",
-    new OpenAIAdapter(config.openaiApiKey || "test-key", openaiBaseUrl),
-    {
-      input_usd_per_token: "0.00001",
-      output_usd_per_token: "0.00003",
-      effective_at: new Date().toISOString(),
-    },
-  );
+  // ============================================================
+  // Model Registration: MVP Open Model Catalog
+  //
+  // All models use OpenAI-compatible protocol via OpenAIAdapter.
+  // Each model is conditionally registered when its API key is
+  // configured (via environment variables). Unconfigured models
+  // are silently skipped and will not appear in GET /v1/models.
+  //
+  // Pricing is per-token USD, sourced from official provider
+  // pricing pages (last updated: 2026-04).
+  // ============================================================
 
-  // Register cheaper model for auto routing tests
-  providerRegistry.register(
-    "openai/gpt-3.5-turbo",
-    new OpenAIAdapter(config.openaiApiKey || "test-key", openaiBaseUrl),
-    {
-      input_usd_per_token: "0.000005",
-      output_usd_per_token: "0.000015",
-      effective_at: new Date().toISOString(),
-    },
-  );
+  // --- OpenAI GPT-4o ---
+  if (config.openaiApiKey) {
+    const openaiBaseUrl = config.openaiBaseUrl || "https://api.openai.com/v1";
+    providerRegistry.register(
+      "openai/gpt-4o",
+      new OpenAIAdapter(config.openaiApiKey, openaiBaseUrl),
+      {
+        input_usd_per_token: "0.0000025",
+        output_usd_per_token: "0.00001",
+        effective_at: new Date().toISOString(),
+      },
+    );
+  }
 
-  // Register MiniMax models (OpenAI-compatible endpoint)
+  // --- MiniMax M2.5 (value tier) ---
   if (config.minimaxApiKey) {
     const minimaxBaseUrl = config.minimaxBaseUrl || "https://api.minimaxi.com/v1";
     providerRegistry.register(
-      "minimax/MiniMax-Text-01",
+      "minimax/MiniMax-M2.5",
+      new OpenAIAdapter(config.minimaxApiKey, minimaxBaseUrl),
+      {
+        input_usd_per_token: "0.0000005",
+        output_usd_per_token: "0.000002",
+        effective_at: new Date().toISOString(),
+      },
+    );
+  }
+
+  // --- MiniMax M2.7 (premium tier) ---
+  if (config.minimaxApiKey) {
+    const minimaxBaseUrl = config.minimaxBaseUrl || "https://api.minimaxi.com/v1";
+    providerRegistry.register(
+      "minimax/MiniMax-M2.7",
       new OpenAIAdapter(config.minimaxApiKey, minimaxBaseUrl),
       {
         input_usd_per_token: "0.000001",
-        output_usd_per_token: "0.000008",
+        output_usd_per_token: "0.000004",
+        effective_at: new Date().toISOString(),
+      },
+    );
+  }
+
+  // --- Kimi K2.6 (Moonshot AI) ---
+  // models.dev provider: moonshot, model: kimi-k2.6
+  if (config.moonshotApiKey) {
+    const moonshotBaseUrl = config.moonshotBaseUrl || "https://api.moonshot.cn/v1";
+    providerRegistry.register(
+      "moonshot/kimi-k2.6",
+      new OpenAIAdapter(config.moonshotApiKey, moonshotBaseUrl),
+      {
+        input_usd_per_token: "0.0000005",
+        output_usd_per_token: "0.000002",
+        effective_at: new Date().toISOString(),
+      },
+    );
+  }
+
+  // --- GLM 5.1 (智谱 AI) ---
+  // models.dev provider: zhipu, model: glm-5.1
+  if (config.zhipuApiKey) {
+    const zhipuBaseUrl = config.zhipuBaseUrl || "https://open.bigmodel.cn/api/paas/v4";
+    providerRegistry.register(
+      "zhipu/glm-5.1",
+      new OpenAIAdapter(config.zhipuApiKey, zhipuBaseUrl),
+      {
+        input_usd_per_token: "0.0000005",
+        output_usd_per_token: "0.000002",
+        effective_at: new Date().toISOString(),
+      },
+    );
+  }
+
+  // --- DeepSeek V4 Pro (budget tier, flagship) ---
+  // models.dev provider: deepseek, model: deepseek-v4-pro
+  if (config.deepseekApiKey) {
+    const deepseekBaseUrl = config.deepseekBaseUrl || "https://api.deepseek.com/v1";
+    providerRegistry.register(
+      "deepseek/deepseek-v4-pro",
+      new OpenAIAdapter(config.deepseekApiKey, deepseekBaseUrl),
+      {
+        input_usd_per_token: "0.00000014",
+        output_usd_per_token: "0.0000004",
+        effective_at: new Date().toISOString(),
+      },
+    );
+  }
+
+  // --- DeepSeek V4 Flash (budget tier, fastest/cheapest) ---
+  // models.dev provider: deepseek, model: deepseek-v4-flash
+  if (config.deepseekApiKey) {
+    const deepseekBaseUrl = config.deepseekBaseUrl || "https://api.deepseek.com/v1";
+    providerRegistry.register(
+      "deepseek/deepseek-v4-flash",
+      new OpenAIAdapter(config.deepseekApiKey, deepseekBaseUrl),
+      {
+        input_usd_per_token: "0.00000014",
+        output_usd_per_token: "0.00000028",
         effective_at: new Date().toISOString(),
       },
     );

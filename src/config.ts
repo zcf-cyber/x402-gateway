@@ -27,6 +27,15 @@ const configSchema = z.object({
   minimaxApiKey: z.string().optional(),
   minimaxBaseUrl: z.string().url().optional(),
 
+  moonshotApiKey: z.string().optional(),
+  moonshotBaseUrl: z.string().url().optional(),
+
+  zhipuApiKey: z.string().optional(),
+  zhipuBaseUrl: z.string().url().optional(),
+
+  deepseekApiKey: z.string().optional(),
+  deepseekBaseUrl: z.string().url().optional(),
+
   evmRpcUrl: z.string().url().default("https://mainnet.base.org"),
 
   platformFeeBps: z.coerce.number().default(500),
@@ -53,6 +62,12 @@ export function loadConfig(): Config {
     anthropicBaseUrl: process.env["ANTHROPIC_BASE_URL"],
     minimaxApiKey: process.env["MINIMAX_API_KEY"],
     minimaxBaseUrl: process.env["MINIMAX_BASE_URL"],
+    moonshotApiKey: process.env["MOONSHOT_API_KEY"],
+    moonshotBaseUrl: process.env["MOONSHOT_BASE_URL"],
+    zhipuApiKey: process.env["ZHIPU_API_KEY"],
+    zhipuBaseUrl: process.env["ZHIPU_BASE_URL"],
+    deepseekApiKey: process.env["DEEPSEEK_API_KEY"],
+    deepseekBaseUrl: process.env["DEEPSEEK_BASE_URL"],
     platformFeeBps: process.env["PLATFORM_FEE_BPS"],
     evmRpcUrl: process.env["EVM_RPC_URL"],
   });
