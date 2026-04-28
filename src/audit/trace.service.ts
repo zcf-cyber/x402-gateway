@@ -143,9 +143,6 @@ export function createTraceService(deps?: TraceServiceDeps): ITraceService {
    * Production environment must migrate to PostgreSQL for persistence.
    */
   const traces = new Map<string, CompleteTrace>();
-  /** Monotonic counter to ensure stable ordering when timestamps collide */
-  let _seq = 0;
-  const traceSeq = new Map<string, number>();
 
   return {
     async startTrace(
@@ -154,7 +151,6 @@ export function createTraceService(deps?: TraceServiceDeps): ITraceService {
       routingMode: RoutingMode,
     ): Promise<void> {
       const now = new Date().toISOString();
-      traceSeq.set(requestId, ++_seq);
 
       traces.set(requestId, {
         request_id: requestId,
@@ -287,11 +283,9 @@ export function createTraceService(deps?: TraceServiceDeps): ITraceService {
     async listTraces(limit?: number): Promise<RequestTrace[]> {
       const allTraces = Array.from(traces.values());
 
-      // Sort by created_at descending (newest first); use insertion sequence as tiebreaker
+      // Sort by created_at descending (newest first)
       allTraces.sort((a, b) => {
-        const timeDiff = new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-        if (timeDiff !== 0) return timeDiff;
-        return (traceSeq.get(b.request_id) ?? 0) - (traceSeq.get(a.request_id) ?? 0);
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
       });
 
       return limit ? allTraces.slice(0, limit) : allTraces;
@@ -299,8 +293,6 @@ export function createTraceService(deps?: TraceServiceDeps): ITraceService {
 
     async clearAll(): Promise<void> {
       traces.clear();
-      traceSeq.clear();
-      _seq = 0;
 
       if (log) {
         log('All traces cleared', { timestamp: new Date().toISOString() });
