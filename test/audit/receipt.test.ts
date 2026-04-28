@@ -323,9 +323,11 @@ describe("TraceService", () => {
     });
 
     it("should return traces in reverse chronological order", async () => {
-      await traceService.startTrace("req-newest" as RequestId, "hash1", "manual");
+      await traceService.startTrace("req-oldest" as RequestId, "hash1", "manual");
+      await new Promise((r) => setTimeout(r, 2));
       await traceService.startTrace("req-middle" as RequestId, "hash2", "manual");
-      await traceService.startTrace("req-oldest" as RequestId, "hash3", "manual");
+      await new Promise((r) => setTimeout(r, 2));
+      await traceService.startTrace("req-newest" as RequestId, "hash3", "manual");
       const traces = await traceService.listTraces();
       expect(traces[0].request_id).toBe("req-newest");
       expect(traces[2].request_id).toBe("req-oldest");
