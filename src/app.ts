@@ -272,7 +272,7 @@ export async function buildApp(config: Config) {
       paymentChain: config.paymentChain,
       paymentAsset: config.paymentAsset,
     }),
-    verifyService: createPaymentVerifyService(config.evmRpcUrl),
+    verifyService: createPaymentVerifyService(config.evmRpcUrl, config.paymentChain),
     replayService: createReplayProtectionService(new InMemoryRedis()),
     routerService: createRouterService({ providerRegistry }),
     meterService: createMeterService({
