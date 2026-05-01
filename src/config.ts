@@ -17,6 +17,7 @@ const configSchema = z.object({
   challengeTtlSeconds: z.coerce.number().default(300),
 
   merchantAddress: z.string().startsWith("0x"),
+  paymentNetwork: z.enum(["mainnet", "testnet"]).default("mainnet"),
   paymentChain: z.string().default("base"),
   paymentAsset: z.string().default("USDC"),
 
@@ -54,6 +55,7 @@ export function loadConfig(): Config {
     challengeSecret: process.env["CHALLENGE_SECRET"],
     challengeTtlSeconds: process.env["CHALLENGE_TTL_SECONDS"],
     merchantAddress: process.env["MERCHANT_ADDRESS"],
+    paymentNetwork: process.env["PAYMENT_NETWORK"],
     paymentChain: process.env["PAYMENT_CHAIN"],
     paymentAsset: process.env["PAYMENT_ASSET"],
     openaiApiKey: process.env["OPENAI_API_KEY"],

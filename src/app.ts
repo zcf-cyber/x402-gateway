@@ -57,6 +57,7 @@ import {
   createPaymentVerifyService,
   type IPaymentVerifyService,
 } from "./x402/verify.service.js";
+import { getSupportedChains } from "./x402/chain-config.js";
 import {
   createReplayProtectionService,
   type IReplayProtectionService,
@@ -272,7 +273,10 @@ export async function buildApp(config: Config) {
       paymentChain: config.paymentChain,
       paymentAsset: config.paymentAsset,
     }),
-    verifyService: createPaymentVerifyService(config.evmRpcUrl, config.paymentChain),
+    verifyService: createPaymentVerifyService(
+      config.evmRpcUrl,
+      getSupportedChains(config.paymentNetwork),
+    ),
     replayService: createReplayProtectionService(new InMemoryRedis()),
     routerService: createRouterService({ providerRegistry }),
     meterService: createMeterService({
