@@ -1,26 +1,26 @@
 import { createPublicClient, http } from "viem";
 import type { Chain, Address } from "viem";
 
-export interface ChainConfig {
+export interface RegisteredChain {
   chain: Chain;
   usdcAddress: Address;
   rpcUrl: string;
 }
 
 export interface IChainRegistry {
-  register(name: string, config: ChainConfig): void;
-  get(name: string): ChainConfig | undefined;
+  register(name: string, config: RegisteredChain): void;
+  get(name: string): RegisteredChain | undefined;
   list(): string[];
 }
 
 export function createChainRegistry(): IChainRegistry {
-  const chains = new Map<string, ChainConfig>();
+  const chains = new Map<string, RegisteredChain>();
 
   return {
-    register(name: string, config: ChainConfig): void {
+    register(name: string, config: RegisteredChain): void {
       chains.set(name.toLowerCase(), config);
     },
-    get(name: string): ChainConfig | undefined {
+    get(name: string): RegisteredChain | undefined {
       return chains.get(name.toLowerCase());
     },
     list(): string[] {

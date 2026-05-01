@@ -124,6 +124,12 @@ function buildChainRegistry(config: Config): IChainRegistry {
     });
   }
 
+  if (registry.list().length === 0) {
+    throw new Error(
+      "No payment chains configured. Set ALCHEMY_API_KEY or EVM_RPC_URL.",
+    );
+  }
+
   return registry;
 }
 
