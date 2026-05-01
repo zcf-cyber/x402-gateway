@@ -1,0 +1,199 @@
+import { Connection } from "@solana/web3.js";
+import type {
+  ChallengePayload,
+  PaymentProof,
+  VerificationResult,
+} from "../types.js";
+import {
+  PaymentVerificationFailedError,
+  InsufficientPaymentError,
+} from "../../errors.js";
+
+/** Official Solana Mainnet USDC SPL Token mint address */
+export const SOLANA_USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+
+/** SPL Token program ID (legacy) */
+export const SPL_TOKEN_PROGRAM_ID = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+/** SPL Token 2022 program ID */
+const SPL_TOKEN_2022_PROGRAM_ID = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
+
+/** USDC on Solana has 6 decimal places (not 18 like EVM) */
+const SOLANA_USDC_DECIMALS = 6;
+
+/**
+ * Parse a decimal amount string to lamports (base units).
+ * e.g. "0.001" -> 1000n (for 6-decimal USDC)
+ */
+function parseSolanaAmount(amount: string): bigint {
+  if (amount.includes(".")) {
+    const [whole, fraction = ""] = amount.split(".");
+    const paddedFraction = fraction
+      .padEnd(SOLANA_USDC_DECIMALS, "0")
+      .slice(0, SOLANA_USDC_DECIMALS);
+    return BigInt(whole + paddedFraction);
+  }
+  return BigInt(amount) * BigInt(10 ** SOLANA_USDC_DECIMALS);
+}
+
+export interface ISolanaVerifyService {
+  verifyPayment(
+    proof: PaymentProof,
+    challenge: ChallengePayload,
+  ): Promise<VerificationResult>;
+}
+
+export function createSolanaVerifyService(deps: {
+  rpcUrl: string;
+}): ISolanaVerifyService {
+  const connection = new Connection(deps.rpcUrl, "confirmed");
+
+  return {
+    async verifyPayment(
+      proof: PaymentProof,
+      challenge: ChallengePayload,
+    ): Promise<VerificationResult> {
+      let signature: string;
+      try {
+        signature = proof.tx_hash;
+        // Basic validation: Solana signatures are base58-encoded 64-88 chars
+        if (!signature || signature.length < 64 || signature.length > 88) {
+          throw new PaymentVerificationFailedError("Invalid Solana transaction signature");
+        }
+      } catch {
+        throw new PaymentVerificationFailedError("Invalid Solana transaction signature");
+      }
+
+      let parsedTx;
+      try {
+        parsedTx = await connection.getParsedTransaction(signature, {
+          commitment: "confirmed",
+          maxSupportedTransactionVersion: 0,
+        });
+      } catch (error) {
+        throw new PaymentVerificationFailedError(
+          `Failed to fetch Solana transaction: ${(error as Error).message}`,
+        );
+      }
+
+      if (!parsedTx) {
+        throw new PaymentVerificationFailedError(
+          "Solana transaction not found or not yet confirmed",
+        );
+      }
+
+      if (parsedTx.meta?.err) {
+        throw new PaymentVerificationFailedError(
+          `Solana transaction failed: ${JSON.stringify(parsedTx.meta.err)}`,
+        );
+      }
+
+      // Validate payer address matches the transaction fee payer
+      const feePayer = parsedTx.transaction.message.accountKeys[0]?.pubkey.toBase58();
+      if (!feePayer || feePayer.toLowerCase() !== proof.payer_address.toLowerCase()) {
+        throw new PaymentVerificationFailedError(
+          "Payer address does not match transaction fee payer",
+        );
+      }
+
+      const requiredAmount = parseSolanaAmount(challenge.amount);
+
+      // Build account index -> owner mapping from preTokenBalances for USDC
+      const accountOwners = new Map<number, string>();
+      for (const pre of parsedTx.meta?.preTokenBalances ?? []) {
+        if (pre.mint === SOLANA_USDC_MINT && pre.owner) {
+          accountOwners.set(pre.accountIndex, pre.owner);
+        }
+      }
+      for (const post of parsedTx.meta?.postTokenBalances ?? []) {
+        if (post.mint === SOLANA_USDC_MINT && post.owner && !accountOwners.has(post.accountIndex)) {
+          accountOwners.set(post.accountIndex, post.owner);
+        }
+      }
+
+      // Also map accountKeys pubkey -> index for quick lookup
+      const pubkeyToIndex = new Map<string, number>();
+      parsedTx.transaction.message.accountKeys.forEach((acc, idx) => {
+        pubkeyToIndex.set(acc.pubkey.toBase58(), idx);
+      });
+
+      // Parse instructions looking for SPL Token transfers
+      let totalReceived = 0n;
+      let foundTransfer = false;
+
+      const instructions = parsedTx.transaction.message.instructions;
+      for (const ix of instructions) {
+        const programId = ix.programId?.toBase58?.() ?? (ix as unknown as Record<string, unknown>).programId;
+        if (
+          programId !== SPL_TOKEN_PROGRAM_ID &&
+          programId !== SPL_TOKEN_2022_PROGRAM_ID
+        ) {
+          continue;
+        }
+
+        const parsed = (ix as unknown as { parsed?: { type?: string; info?: Record<string, unknown> } }).parsed;
+        if (!parsed) continue;
+
+        const type = parsed.type;
+        if (type !== "transfer" && type !== "transferChecked") continue;
+
+        const info = parsed.info;
+        if (!info) continue;
+
+        // Check mint for transferChecked
+        if (type === "transferChecked") {
+          const mint = info.mint as string | undefined;
+          if (mint !== SOLANA_USDC_MINT) continue;
+        }
+
+        // Resolve source/destination owners via token balances
+        const sourceAccount = info.source as string | undefined;
+        const destAccount = info.destination as string | undefined;
+        if (!sourceAccount || !destAccount) continue;
+
+        const sourceIdx = pubkeyToIndex.get(sourceAccount);
+        const destIdx = pubkeyToIndex.get(destAccount);
+        if (sourceIdx === undefined || destIdx === undefined) continue;
+
+        const sourceOwner = accountOwners.get(sourceIdx);
+        const destOwner = accountOwners.get(destIdx);
+
+        if (
+          sourceOwner?.toLowerCase() === proof.payer_address.toLowerCase() &&
+          destOwner?.toLowerCase() === challenge.merchant_address.toLowerCase()
+        ) {
+          foundTransfer = true;
+          if (type === "transferChecked") {
+            const tokenAmount = info.tokenAmount as { amount?: string } | undefined;
+            if (tokenAmount?.amount) {
+              totalReceived += BigInt(tokenAmount.amount);
+            }
+          } else {
+            const amount = info.amount as string | undefined;
+            if (amount) {
+              totalReceived += BigInt(amount);
+            }
+          }
+        }
+      }
+
+      if (!foundTransfer) {
+        throw new PaymentVerificationFailedError(
+          "No USDC transfer from payer to merchant found in transaction",
+        );
+      }
+
+      if (totalReceived < requiredAmount) {
+        throw new InsufficientPaymentError(
+          challenge.amount,
+          (Number(totalReceived) / 10 ** SOLANA_USDC_DECIMALS).toFixed(SOLANA_USDC_DECIMALS),
+        );
+      }
+
+      return {
+        verified: true,
+        payer_address: proof.payer_address,
+        amount: challenge.amount,
+      };
+    },
+  };
+}
