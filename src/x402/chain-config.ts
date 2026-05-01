@@ -61,3 +61,30 @@ export function getSupportedChains(
   }
   return { ...MAINNET_CHAINS };
 }
+
+/** Alchemy subdomain slug per chain name (key used in getSupportedChains) */
+export const ALCHEMY_SLUGS: Record<string, string> = {
+  ethereum: "eth-mainnet",
+  base: "base-mainnet",
+  arbitrum: "arb-mainnet",
+  optimism: "opt-mainnet",
+  polygon: "polygon-mainnet",
+  avalanche: "avax-mainnet",
+  "ethereum-sepolia": "eth-sepolia",
+  "base-sepolia": "base-sepolia",
+};
+
+/** Build a per-chain RPC URL map using a single Alchemy API key. */
+export function buildAlchemyRpcUrls(
+  apiKey: string,
+  chains: Record<string, ChainConfig>,
+): Record<string, string> {
+  const urls: Record<string, string> = {};
+  for (const name of Object.keys(chains)) {
+    const slug = ALCHEMY_SLUGS[name];
+    if (slug) {
+      urls[name] = `https://${slug}.g.alchemy.com/v2/${apiKey}`;
+    }
+  }
+  return urls;
+}

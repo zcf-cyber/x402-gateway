@@ -37,7 +37,8 @@ const configSchema = z.object({
   deepseekApiKey: z.string().optional(),
   deepseekBaseUrl: z.string().url().optional(),
 
-  evmRpcUrl: z.string().url().default("https://mainnet.base.org"),
+  evmRpcUrl: z.string().url().optional(),
+  alchemyApiKey: z.string().optional(),
 
   platformFeeBps: z.coerce.number().default(500),
 });
@@ -72,6 +73,7 @@ export function loadConfig(): Config {
     deepseekBaseUrl: process.env["DEEPSEEK_BASE_URL"],
     platformFeeBps: process.env["PLATFORM_FEE_BPS"],
     evmRpcUrl: process.env["EVM_RPC_URL"],
+    alchemyApiKey: process.env["ALCHEMY_API_KEY"],
   });
 }
 

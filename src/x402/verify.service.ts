@@ -3,8 +3,8 @@ import type {
   PaymentProof,
   VerificationResult,
 } from "./types.js";
-import { createPublicClient, http } from "viem";
-import type { ChainConfig } from "./chain-config.js";
+import type { IChainRegistry } from "./chain-registry.service.js";
+import { buildPublicClientMap } from "./chain-registry.service.js";
 import {
   PaymentVerificationFailedError,
   InsufficientPaymentError,
@@ -38,16 +38,9 @@ export interface IPaymentVerifyService {
 }
 
 export function createPaymentVerifyService(
-  evmRpcUrl: string,
-  supportedChains: Record<string, ChainConfig>,
+  chainRegistry: IChainRegistry,
 ): IPaymentVerifyService {
-  const clients = new Map<string, ReturnType<typeof createPublicClient>>();
-  for (const [key, config] of Object.entries(supportedChains)) {
-    clients.set(key.toLowerCase(), createPublicClient({
-      chain: config.chain,
-      transport: http(evmRpcUrl),
-    }));
-  }
+  const clients = buildPublicClientMap(chainRegistry);
 
   return {
     async verifyPayment(
@@ -55,7 +48,7 @@ export function createPaymentVerifyService(
       challenge: ChallengePayload,
     ): Promise<VerificationResult> {
       const chainKey = proof.chain.toLowerCase();
-      const chainConfig = supportedChains[chainKey];
+      const chainConfig = chainRegistry.get(chainKey);
       const publicClient = clients.get(chainKey);
 
       if (!chainConfig || !publicClient) {
