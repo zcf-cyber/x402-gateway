@@ -56,7 +56,7 @@ import {
 import {
   createPaymentVerifyService,
   type IPaymentVerifyService,
-} from "./x402/verify.service.js";
+} from "./x402/verify/index.js";
 import { getSupportedChains, buildAlchemyRpcUrls } from "./x402/chain-config.js";
 import {
   createChainRegistry,
@@ -306,9 +306,10 @@ export async function buildApp(config: Config) {
       paymentChain: config.paymentChain,
       paymentAsset: config.paymentAsset,
     }),
-    verifyService: createPaymentVerifyService(
-      buildChainRegistry(config),
-    ),
+    verifyService: createPaymentVerifyService({
+      chainRegistry: buildChainRegistry(config),
+      solanaRpcUrl: config.solanaRpcUrl,
+    }),
     replayService: createReplayProtectionService(new InMemoryRedis()),
     routerService: createRouterService({ providerRegistry }),
     meterService: createMeterService({

@@ -6,7 +6,8 @@ import { createChallengeService } from "../src/x402/challenge.service.js";
 import {
   createPaymentVerifyService,
   type IPaymentVerifyService,
-} from "../src/x402/verify.service.js";
+} from "../src/x402/verify/index.js";
+import { createChainRegistry } from "../src/x402/chain-registry.service.js";
 import {
   createReplayProtectionService,
   type IReplayProtectionService,
@@ -170,7 +171,17 @@ export function buildTestApp(overrides: Partial<ServiceContainer> = {}) {
       paymentChain: "base",
       paymentAsset: "USDC",
     }),
-    verifyService: createPaymentVerifyService("https://sepolia.base.org"),
+    verifyService: createPaymentVerifyService({
+      chainRegistry: (() => {
+        const registry = createChainRegistry();
+        registry.register("base", {
+          chain: { id: 8453, name: "Base", nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 }, rpcUrls: { default: { http: [] } } } as import("viem").Chain,
+          usdcAddress: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+          rpcUrl: "https://sepolia.base.org",
+        });
+        return registry;
+      })(),
+    }),
     replayService: createReplayProtectionService(null as never),
     routerService: createRouterService({ providerRegistry }),
     meterService: createMeterService({

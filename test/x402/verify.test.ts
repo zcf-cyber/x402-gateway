@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   createPaymentVerifyService,
-} from "../../src/x402/verify.service.js";
+} from "../../src/x402/verify/index.js";
 import { createChainRegistry } from "../../src/x402/chain-registry.service.js";
 import { PaymentVerificationFailedError } from "../../src/errors.js";
 
@@ -13,7 +13,7 @@ describe("PaymentVerifyService", () => {
     rpcUrl: "https://mainnet.base.org",
   });
 
-  const service = createPaymentVerifyService(registry);
+  const service = createPaymentVerifyService({ chainRegistry: registry });
 
   it("should throw PaymentVerificationFailedError for unsupported chain", async () => {
     const proof = {

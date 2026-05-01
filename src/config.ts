@@ -39,6 +39,7 @@ const configSchema = z.object({
 
   evmRpcUrl: z.string().url().optional(),
   alchemyApiKey: z.string().optional(),
+  solanaRpcUrl: z.string().url().optional(),
 
   platformFeeBps: z.coerce.number().default(500),
 });
@@ -74,6 +75,7 @@ export function loadConfig(): Config {
     platformFeeBps: process.env["PLATFORM_FEE_BPS"],
     evmRpcUrl: process.env["EVM_RPC_URL"],
     alchemyApiKey: process.env["ALCHEMY_API_KEY"],
+    solanaRpcUrl: process.env["SOLANA_RPC_URL"],
   });
 }
 

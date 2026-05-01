@@ -2,13 +2,13 @@ import type {
   ChallengePayload,
   PaymentProof,
   VerificationResult,
-} from "./types.js";
-import type { IChainRegistry } from "./chain-registry.service.js";
-import { buildPublicClientMap } from "./chain-registry.service.js";
+} from "../types.js";
+import type { IChainRegistry } from "../chain-registry.service.js";
+import { buildPublicClientMap } from "../chain-registry.service.js";
 import {
   PaymentVerificationFailedError,
   InsufficientPaymentError,
-} from "../errors.js";
+} from "../../errors.js";
 
 /**
  * Parse a wei amount string to a bigint.
@@ -30,16 +30,16 @@ function parseAmount(amount: string): bigint {
 const ERC20_TRANSFER_SIGNATURE =
   "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df35b9d8";
 
-export interface IPaymentVerifyService {
+export interface IEvmVerifyService {
   verifyPayment(
     proof: PaymentProof,
     challenge: ChallengePayload,
   ): Promise<VerificationResult>;
 }
 
-export function createPaymentVerifyService(
+export function createEvmVerifyService(
   chainRegistry: IChainRegistry,
-): IPaymentVerifyService {
+): IEvmVerifyService {
   const clients = buildPublicClientMap(chainRegistry);
 
   return {
