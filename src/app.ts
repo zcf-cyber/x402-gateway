@@ -57,6 +57,11 @@ import {
   createPaymentVerifyService,
   type IPaymentVerifyService,
 } from "./x402/verify.service.js";
+import { getSupportedChains, buildAlchemyRpcUrls } from "./x402/chain-config.js";
+import {
+  createChainRegistry,
+  type IChainRegistry,
+} from "./x402/chain-registry.service.js";
 import {
   createReplayProtectionService,
   type IReplayProtectionService,
@@ -97,6 +102,35 @@ export interface ServiceContainer {
   ledgerService: ILedgerService;
   traceService: ITraceService;
   receiptService: IReceiptService;
+}
+
+function buildChainRegistry(config: Config): IChainRegistry {
+  const registry = createChainRegistry();
+  const supportedChains = getSupportedChains(config.paymentNetwork);
+
+  // Per-chain RPC URLs: explicit env overrides > Alchemy template > skip
+  const alchemyKey = config.alchemyApiKey;
+  const alchemyUrls = alchemyKey
+    ? buildAlchemyRpcUrls(alchemyKey, supportedChains)
+    : {};
+
+  for (const [name, chainConfig] of Object.entries(supportedChains)) {
+    const rpcUrl = alchemyUrls[name] || config.evmRpcUrl;
+    if (!rpcUrl) continue; // skip chains with no reachable RPC
+    registry.register(name, {
+      chain: chainConfig.chain,
+      usdcAddress: chainConfig.usdcAddress,
+      rpcUrl,
+    });
+  }
+
+  if (registry.list().length === 0) {
+    throw new Error(
+      "No payment chains configured. Set ALCHEMY_API_KEY or EVM_RPC_URL.",
+    );
+  }
+
+  return registry;
 }
 
 export async function buildApp(config: Config) {
@@ -272,7 +306,9 @@ export async function buildApp(config: Config) {
       paymentChain: config.paymentChain,
       paymentAsset: config.paymentAsset,
     }),
-    verifyService: createPaymentVerifyService(config.evmRpcUrl, config.paymentChain),
+    verifyService: createPaymentVerifyService(
+      buildChainRegistry(config),
+    ),
     replayService: createReplayProtectionService(new InMemoryRedis()),
     routerService: createRouterService({ providerRegistry }),
     meterService: createMeterService({

@@ -3,34 +3,12 @@ import type {
   PaymentProof,
   VerificationResult,
 } from "./types.js";
-import { createPublicClient, http, type Chain } from "viem";
-import { base, baseSepolia, mainnet, sepolia } from "viem/chains";
+import type { IChainRegistry } from "./chain-registry.service.js";
+import { buildPublicClientMap } from "./chain-registry.service.js";
 import {
   PaymentVerificationFailedError,
   InsufficientPaymentError,
 } from "../errors.js";
-
-// USDC Contract Addresses
-const USDC_CONTRACTS: Record<string, `0x${string}`> = {
-  // Base Mainnet
-  base: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-  // Base Sepolia Testnet
-  "base-sepolia": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
-  // Ethereum Mainnet
-  ethereum: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
-  // Ethereum Sepolia Testnet
-  sepolia: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
-};
-
-const DEFAULT_USDC_CONTRACT: `0x${string}` = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
-
-// Chain mapping
-const CHAIN_MAPPING: Record<string, Chain> = {
-  base,
-  "base-sepolia": baseSepolia,
-  ethereum: mainnet,
-  sepolia,
-} as const;
 
 /**
  * Parse a wei amount string to a bigint.
@@ -60,22 +38,26 @@ export interface IPaymentVerifyService {
 }
 
 export function createPaymentVerifyService(
-  evmRpcUrl: string,
-  paymentChain: string = "base",
+  chainRegistry: IChainRegistry,
 ): IPaymentVerifyService {
-  const chain = CHAIN_MAPPING[paymentChain.toLowerCase()] || base;
-  const usdcContract = USDC_CONTRACTS[paymentChain.toLowerCase()] || DEFAULT_USDC_CONTRACT;
-
-  const publicClient = createPublicClient({
-    chain,
-    transport: http(evmRpcUrl),
-  });
+  const clients = buildPublicClientMap(chainRegistry);
 
   return {
     async verifyPayment(
       proof: PaymentProof,
       challenge: ChallengePayload,
     ): Promise<VerificationResult> {
+      const chainKey = proof.chain.toLowerCase();
+      const chainConfig = chainRegistry.get(chainKey);
+      const publicClient = clients.get(chainKey);
+
+      if (!chainConfig || !publicClient) {
+        throw new PaymentVerificationFailedError(
+          `Unsupported chain: ${proof.chain}`,
+        );
+      }
+
+      const usdcContract = chainConfig.usdcAddress;
       const txHash = proof.tx_hash as `0x${string}`;
 
       let receipt;

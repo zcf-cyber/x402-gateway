@@ -17,6 +17,7 @@ const configSchema = z.object({
   challengeTtlSeconds: z.coerce.number().default(300),
 
   merchantAddress: z.string().startsWith("0x"),
+  paymentNetwork: z.enum(["mainnet", "testnet"]).default("mainnet"),
   paymentChain: z.string().default("base"),
   paymentAsset: z.string().default("USDC"),
 
@@ -36,7 +37,8 @@ const configSchema = z.object({
   deepseekApiKey: z.string().optional(),
   deepseekBaseUrl: z.string().url().optional(),
 
-  evmRpcUrl: z.string().url().default("https://mainnet.base.org"),
+  evmRpcUrl: z.string().url().optional(),
+  alchemyApiKey: z.string().optional(),
 
   platformFeeBps: z.coerce.number().default(500),
 });
@@ -54,6 +56,7 @@ export function loadConfig(): Config {
     challengeSecret: process.env["CHALLENGE_SECRET"],
     challengeTtlSeconds: process.env["CHALLENGE_TTL_SECONDS"],
     merchantAddress: process.env["MERCHANT_ADDRESS"],
+    paymentNetwork: process.env["PAYMENT_NETWORK"],
     paymentChain: process.env["PAYMENT_CHAIN"],
     paymentAsset: process.env["PAYMENT_ASSET"],
     openaiApiKey: process.env["OPENAI_API_KEY"],
@@ -70,6 +73,7 @@ export function loadConfig(): Config {
     deepseekBaseUrl: process.env["DEEPSEEK_BASE_URL"],
     platformFeeBps: process.env["PLATFORM_FEE_BPS"],
     evmRpcUrl: process.env["EVM_RPC_URL"],
+    alchemyApiKey: process.env["ALCHEMY_API_KEY"],
   });
 }
 
