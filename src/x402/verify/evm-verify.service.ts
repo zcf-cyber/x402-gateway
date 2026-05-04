@@ -11,16 +11,28 @@ import {
 } from "../../errors.js";
 
 /**
- * Parse a wei amount string to a bigint.
- * Handles both plain numbers and ether-style strings (e.g., "0.001")
+ * Parse an amount string to a bigint using the specified token decimals.
+ * Handles both plain numbers and decimal strings (e.g., "0.001").
  */
-function parseAmount(amount: string): bigint {
+export function parseAmount(amount: string, decimals: number = 18): bigint {
   if (amount.includes(".")) {
     const [whole, fraction = ""] = amount.split(".");
-    const paddedFraction = fraction.padEnd(18, "0").slice(0, 18);
+    const paddedFraction = fraction.padEnd(decimals, "0").slice(0, decimals);
     return BigInt(whole + paddedFraction);
   }
   return BigInt(amount);
+}
+
+/**
+ * Return the number of decimals for a given asset symbol.
+ */
+export function getAssetDecimals(asset: string): number {
+  switch (asset.toUpperCase()) {
+    case "USDC":
+      return 6;
+    default:
+      return 18; // ETH, MATIC, BASE, etc.
+  }
 }
 
 /**
@@ -82,7 +94,8 @@ export function createEvmVerifyService(
         );
       }
 
-      const requiredAmount = parseAmount(challenge.amount);
+      const assetDecimals = getAssetDecimals(challenge.asset);
+      const requiredAmount = parseAmount(challenge.amount, assetDecimals);
       const isNativeAsset =
         challenge.asset === "ETH" ||
         challenge.asset === "MATIC" ||
