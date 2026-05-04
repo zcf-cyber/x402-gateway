@@ -2,6 +2,10 @@ import { describe, it, expect } from "vitest";
 import {
   createPaymentVerifyService,
 } from "../../src/x402/verify/index.js";
+import {
+  parseAmount,
+  getAssetDecimals,
+} from "../../src/x402/verify/evm-verify.service.js";
 import { createChainRegistry } from "../../src/x402/chain-registry.service.js";
 import { PaymentVerificationFailedError } from "../../src/errors.js";
 
@@ -61,5 +65,71 @@ describe("PaymentVerifyService", () => {
     await expect(service.verifyPayment(proof, challenge)).rejects.toThrow(
       "Unsupported chain: UNSUPPORTED",
     );
+  });
+});
+
+describe("parseAmount", () => {
+  it("should parse decimal amount according to token decimals", () => {
+    // 0.001 * 10^6 = 1000 (USDC)
+    expect(parseAmount("0.001", 6)).toBe(1000n);
+    // 1.5 * 10^6 = 1_500_000 (USDC)
+    expect(parseAmount("1.5", 6)).toBe(1500000n);
+    // 0.001 * 10^18 = 10^15 (ETH)
+    expect(parseAmount("0.001", 18)).toBe(1000000000000000n);
+    // 1.5 * 10^18 = 1.5 * 10^18 (ETH)
+    expect(parseAmount("1.5", 18)).toBe(1500000000000000000n);
+  });
+
+  it("should default to 18 decimals for backward compatibility", () => {
+    expect(parseAmount("0.001")).toBe(1000000000000000n);
+  });
+
+  it("should handle whole numbers as raw atomic units", () => {
+    expect(parseAmount("100", 6)).toBe(100n);
+    expect(parseAmount("100", 18)).toBe(100n);
+  });
+
+  it("should be deterministic for any arbitrary decimals", () => {
+    // Supports future tokens with arbitrary decimals (e.g. 8, 9, 12)
+    expect(parseAmount("0.1", 8)).toBe(10000000n);
+    expect(parseAmount("0.1", 9)).toBe(100000000n);
+    expect(parseAmount("0.1", 12)).toBe(100000000000n);
+  });
+});
+
+describe("getAssetDecimals", () => {
+  it("should return 6 for USDC", () => {
+    expect(getAssetDecimals("USDC")).toBe(6);
+    expect(getAssetDecimals("usdc")).toBe(6);
+    expect(getAssetDecimals("Usdc")).toBe(6);
+  });
+
+  it("should return 18 for native assets and unknown tokens", () => {
+    expect(getAssetDecimals("ETH")).toBe(18);
+    expect(getAssetDecimals("MATIC")).toBe(18);
+    expect(getAssetDecimals("BASE")).toBe(18);
+    expect(getAssetDecimals("UNKNOWN")).toBe(18);
+  });
+});
+
+describe("USDC decimal bug fix (issue #56)", () => {
+  it("should normalize requiredAmount to token decimals for comparison", () => {
+    // Bug: parseAmount("0.001") defaulted to 18 decimals = 10^15
+    // USDC transfer value on-chain for 0.001 USDC = 1000 (6 decimals)
+    // 1000 < 10^15 would falsely trigger insufficient_payment
+    const usdcDecimals = getAssetDecimals("USDC");
+    const requiredAmount = parseAmount("0.001", usdcDecimals);
+    const onChainTransferValue = 1000n; // 0.001 USDC in 6 decimals
+
+    expect(requiredAmount).toBe(1000n);
+    expect(onChainTransferValue).toBeGreaterThanOrEqual(requiredAmount);
+  });
+
+  it("should still reject payment below required amount", () => {
+    const usdcDecimals = getAssetDecimals("USDC");
+    const requiredAmount = parseAmount("0.001", usdcDecimals); // 1000n
+    const onChainTransferValue = 500n; // 0.0005 USDC in 6 decimals
+
+    expect(onChainTransferValue).toBeLessThan(requiredAmount);
   });
 });
