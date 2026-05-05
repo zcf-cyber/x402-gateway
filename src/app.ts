@@ -183,7 +183,7 @@ export async function buildApp(config: Config) {
   if (config.openaiApiKey) {
     const openaiBaseUrl = config.openaiBaseUrl || "https://api.openai.com/v1";
     providerRegistry.register(
-      "openai/gpt-4o",
+      "gpt-4o",
       new OpenAIAdapter(config.openaiApiKey, openaiBaseUrl),
       {
         input_usd_per_token: "0.0000025",
@@ -197,7 +197,7 @@ export async function buildApp(config: Config) {
   if (config.minimaxApiKey) {
     const minimaxBaseUrl = config.minimaxBaseUrl || "https://api.minimaxi.com/v1";
     providerRegistry.register(
-      "minimax/MiniMax-M2.5",
+      "MiniMax-M2.5",
       new OpenAIAdapter(config.minimaxApiKey, minimaxBaseUrl),
       {
         input_usd_per_token: "0.0000005",
@@ -211,7 +211,7 @@ export async function buildApp(config: Config) {
   if (config.minimaxApiKey) {
     const minimaxBaseUrl = config.minimaxBaseUrl || "https://api.minimaxi.com/v1";
     providerRegistry.register(
-      "minimax/MiniMax-M2.7",
+      "MiniMax-M2.7",
       new OpenAIAdapter(config.minimaxApiKey, minimaxBaseUrl),
       {
         input_usd_per_token: "0.000001",
@@ -226,7 +226,7 @@ export async function buildApp(config: Config) {
   if (config.moonshotApiKey) {
     const moonshotBaseUrl = config.moonshotBaseUrl || "https://api.moonshot.cn/v1";
     providerRegistry.register(
-      "moonshot/kimi-k2.6",
+      "kimi-k2.6",
       new OpenAIAdapter(config.moonshotApiKey, moonshotBaseUrl),
       {
         input_usd_per_token: "0.0000005",
@@ -241,7 +241,7 @@ export async function buildApp(config: Config) {
   if (config.zhipuApiKey) {
     const zhipuBaseUrl = config.zhipuBaseUrl || "https://open.bigmodel.cn/api/paas/v4";
     providerRegistry.register(
-      "zhipu/glm-5.1",
+      "glm-5.1",
       new OpenAIAdapter(config.zhipuApiKey, zhipuBaseUrl),
       {
         input_usd_per_token: "0.0000005",
@@ -256,7 +256,7 @@ export async function buildApp(config: Config) {
   if (config.deepseekApiKey) {
     const deepseekBaseUrl = config.deepseekBaseUrl || "https://api.deepseek.com/v1";
     providerRegistry.register(
-      "deepseek/deepseek-v4-pro",
+      "deepseek-v4-pro",
       new OpenAIAdapter(config.deepseekApiKey, deepseekBaseUrl),
       {
         input_usd_per_token: "0.00000014",
@@ -271,7 +271,7 @@ export async function buildApp(config: Config) {
   if (config.deepseekApiKey) {
     const deepseekBaseUrl = config.deepseekBaseUrl || "https://api.deepseek.com/v1";
     providerRegistry.register(
-      "deepseek/deepseek-v4-flash",
+      "deepseek-v4-flash",
       new OpenAIAdapter(config.deepseekApiKey, deepseekBaseUrl),
       {
         input_usd_per_token: "0.00000014",
