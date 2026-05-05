@@ -40,7 +40,7 @@ export function getAssetDecimals(asset: string): number {
  * keccak256("Transfer(address,address,uint256)")
  */
 const ERC20_TRANSFER_SIGNATURE =
-  "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df35b9d8";
+  "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
 
 export interface IEvmVerifyService {
   verifyPayment(
