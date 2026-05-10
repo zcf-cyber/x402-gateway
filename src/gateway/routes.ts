@@ -74,6 +74,13 @@ export function registerRoutes(
       const challengePayload: ChallengePayload =
         await services.challengeService.verifyChallenge(challengeHeader, body);
 
+      // Cross-chain validation: ensure payment chain matches challenge chain
+      if (paymentProof.chain.toLowerCase() !== challengePayload.chain.toLowerCase()) {
+        throw new PaymentVerificationFailedError(
+          `Chain mismatch: challenge requires ${challengePayload.chain}, but proof is on ${paymentProof.chain}`
+        );
+      }
+
       // Idempotency check
       if (idempotencyKey) {
         const cached =

@@ -390,6 +390,46 @@ describe("End-to-End Integration Flow", () => {
       const body = response.json();
       expect(body.error.code).toBe("request_hash_mismatch");
     });
+
+    it("should reject payment on wrong chain", async () => {
+      const { app } = buildMockedTestApp();
+
+      // Get challenge for base chain
+      const challengeResponse = await app.inject({
+        method: "POST",
+        url: "/v1/chat/completions",
+        payload: {
+          model: "openai/gpt-4o",
+          messages: [{ role: "user", content: "Hello" }],
+        },
+      });
+
+      expect(challengeResponse.statusCode).toBe(402);
+      const challengeToken =
+        challengeResponse.json().payment_requirements.challenge_token;
+
+      // Submit payment with wrong chain (ethereum instead of base)
+      const paymentProof = createMockPaymentProof({ chain: "ethereum" });
+      const paymentHeader = encodePaymentProof(paymentProof);
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/chat/completions",
+        payload: {
+          model: "openai/gpt-4o",
+          messages: [{ role: "user", content: "Hello" }],
+        },
+        headers: {
+          "x-402-challenge": challengeToken,
+          "x-402-payment": paymentHeader,
+        },
+      });
+
+      expect(response.statusCode).toBe(402);
+      const body = response.json();
+      expect(body.error.code).toBe("payment_verification_failed");
+      expect(body.error.message).toContain("Chain mismatch");
+    });
   });
 
   describe("Routing Failures and Fallback", () => {
