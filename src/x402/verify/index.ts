@@ -4,6 +4,7 @@ import type {
   VerificationResult,
 } from "../types.js";
 import type { IChainRegistry } from "../chain-registry.service.js";
+import type { ITokenRegistry } from "../token-registry.service.js";
 import {
   createEvmVerifyService,
   type IEvmVerifyService,
@@ -24,10 +25,14 @@ export interface IPaymentVerifyService {
 export function createPaymentVerifyService(deps: {
   chainRegistry: IChainRegistry;
   solanaRpcUrl?: string;
+  tokenRegistry?: ITokenRegistry;
 }): IPaymentVerifyService {
-  const evmVerifier: IEvmVerifyService = createEvmVerifyService(deps.chainRegistry);
+  const evmVerifier: IEvmVerifyService = createEvmVerifyService(
+    deps.chainRegistry,
+    deps.tokenRegistry,
+  );
   const solanaVerifier: ISolanaVerifyService | undefined = deps.solanaRpcUrl
-    ? createSolanaVerifyService({ rpcUrl: deps.solanaRpcUrl })
+    ? createSolanaVerifyService({ rpcUrl: deps.solanaRpcUrl, tokenRegistry: deps.tokenRegistry })
     : undefined;
 
   return {

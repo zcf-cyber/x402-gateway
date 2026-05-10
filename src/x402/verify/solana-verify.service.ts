@@ -4,6 +4,7 @@ import type {
   PaymentProof,
   VerificationResult,
 } from "../types.js";
+import type { ITokenRegistry } from "../token-registry.service.js";
 import {
   PaymentVerificationFailedError,
   InsufficientPaymentError,
@@ -17,22 +18,19 @@ export const SPL_TOKEN_PROGRAM_ID = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
 /** SPL Token 2022 program ID */
 const SPL_TOKEN_2022_PROGRAM_ID = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
 
-/** USDC on Solana has 6 decimal places (not 18 like EVM) */
-const SOLANA_USDC_DECIMALS = 6;
-
 /**
- * Parse a decimal amount string to lamports (base units).
- * e.g. "0.001" -> 1000n (for 6-decimal USDC)
+ * Parse a decimal amount string to base units using specified decimals.
+ * e.g. "0.001" -> 1000n (for 6-decimal tokens like USDC)
  */
-function parseSolanaAmount(amount: string): bigint {
+function parseSolanaAmount(amount: string, decimals: number): bigint {
   if (amount.includes(".")) {
     const [whole, fraction = ""] = amount.split(".");
     const paddedFraction = fraction
-      .padEnd(SOLANA_USDC_DECIMALS, "0")
-      .slice(0, SOLANA_USDC_DECIMALS);
+      .padEnd(decimals, "0")
+      .slice(0, decimals);
     return BigInt(whole + paddedFraction);
   }
-  return BigInt(amount) * BigInt(10 ** SOLANA_USDC_DECIMALS);
+  return BigInt(amount) * BigInt(10 ** decimals);
 }
 
 export interface ISolanaVerifyService {
@@ -44,6 +42,7 @@ export interface ISolanaVerifyService {
 
 export function createSolanaVerifyService(deps: {
   rpcUrl: string;
+  tokenRegistry?: ITokenRegistry;
 }): ISolanaVerifyService {
   const connection = new Connection(deps.rpcUrl, "confirmed");
 
@@ -95,17 +94,22 @@ export function createSolanaVerifyService(deps: {
         );
       }
 
-      const requiredAmount = parseSolanaAmount(challenge.amount);
+      // Resolve token config via TokenRegistry (preferred) or legacy fallback
+      const tokenConfig = deps.tokenRegistry?.get("solana", challenge.asset);
+      const tokenMint = tokenConfig?.address ?? SOLANA_USDC_MINT;
+      const tokenDecimals = tokenConfig?.decimals ?? 6;
+      const tokenSymbol = tokenConfig?.symbol ?? challenge.asset;
+      const requiredAmount = parseSolanaAmount(challenge.amount, tokenDecimals);
 
-      // Build account index -> owner mapping from preTokenBalances for USDC
+      // Build account index -> owner mapping from preTokenBalances for the token
       const accountOwners = new Map<number, string>();
       for (const pre of parsedTx.meta?.preTokenBalances ?? []) {
-        if (pre.mint === SOLANA_USDC_MINT && pre.owner) {
+        if (pre.mint === tokenMint && pre.owner) {
           accountOwners.set(pre.accountIndex, pre.owner);
         }
       }
       for (const post of parsedTx.meta?.postTokenBalances ?? []) {
-        if (post.mint === SOLANA_USDC_MINT && post.owner && !accountOwners.has(post.accountIndex)) {
+        if (post.mint === tokenMint && post.owner && !accountOwners.has(post.accountIndex)) {
           accountOwners.set(post.accountIndex, post.owner);
         }
       }
@@ -142,7 +146,7 @@ export function createSolanaVerifyService(deps: {
         // Check mint for transferChecked
         if (type === "transferChecked") {
           const mint = info.mint as string | undefined;
-          if (mint !== SOLANA_USDC_MINT) continue;
+          if (mint !== tokenMint) continue;
         }
 
         // Resolve source/destination owners via token balances
@@ -178,14 +182,14 @@ export function createSolanaVerifyService(deps: {
 
       if (!foundTransfer) {
         throw new PaymentVerificationFailedError(
-          "No USDC transfer from payer to merchant found in transaction",
+          `No ${tokenSymbol} transfer from payer to merchant found in transaction`,
         );
       }
 
       if (totalReceived < requiredAmount) {
         throw new InsufficientPaymentError(
           challenge.amount,
-          (Number(totalReceived) / 10 ** SOLANA_USDC_DECIMALS).toFixed(SOLANA_USDC_DECIMALS),
+          (Number(totalReceived) / 10 ** tokenDecimals).toFixed(tokenDecimals),
         );
       }
 
