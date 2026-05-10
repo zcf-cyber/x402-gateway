@@ -120,7 +120,7 @@ describe("TokenRegistry", () => {
 
   describe("buildTokenRegistryFromChains", () => {
     it("should populate registry from chain config records", () => {
-      const chains = {
+      const chains: Record<string, { tokens: Record<string, TokenConfig> }> = {
         ethereum: {
           tokens: {
             USDC: usdcConfig,
@@ -149,6 +149,33 @@ describe("TokenRegistry", () => {
     it("should produce empty registry for empty chains", () => {
       const registry = buildTokenRegistryFromChains({});
       expect(registry.listAssets("ethereum")).toEqual([]);
+    });
+
+    it("should support Solana when registered after EVM chains", () => {
+      const registry = buildTokenRegistryFromChains({
+        base: {
+          tokens: {
+            USDC: {
+              symbol: "USDC",
+              decimals: 6,
+              address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+              type: "erc20",
+            },
+          },
+        },
+      });
+
+      registry.register("solana", "USDC", {
+        symbol: "USDC",
+        decimals: 6,
+        address: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" as `0x${string}`,
+        type: "erc20",
+      });
+
+      expect(registry.get("solana", "USDC")).toBeDefined();
+      expect(registry.get("solana", "USDC")?.decimals).toBe(6);
+      expect(registry.get("solana", "USDC")?.symbol).toBe("USDC");
+      expect(registry.isNativeAsset("solana", "USDC")).toBe(false);
     });
   });
 });

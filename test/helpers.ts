@@ -169,8 +169,6 @@ export function buildTestApp(overrides: Partial<ServiceContainer> = {}) {
       challengeSecret: "test-secret-at-least-32-chars-long-for-testing",
       challengeTtlSeconds: 300,
       merchantAddress: "0x0000000000000000000000000000000000000001",
-      paymentChain: "base",
-      paymentAsset: "USDC",
     }),
     verifyService: createPaymentVerifyService({
       chainRegistry: (() => {
@@ -252,8 +250,6 @@ export function buildMockedTestApp(options?: {
       challengeSecret: "test-secret-at-least-32-chars-long-for-testing",
       challengeTtlSeconds: 300,
       merchantAddress: "0x0000000000000000000000000000000000000001",
-      paymentChain: "base",
-      paymentAsset: "USDC",
     }),
     verifyService,
     replayService,
