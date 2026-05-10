@@ -42,7 +42,7 @@ export interface ISolanaVerifyService {
 
 export function createSolanaVerifyService(deps: {
   rpcUrl: string;
-  tokenRegistry?: ITokenRegistry;
+  tokenRegistry: ITokenRegistry;
 }): ISolanaVerifyService {
   const connection = new Connection(deps.rpcUrl, "confirmed");
 
@@ -54,7 +54,6 @@ export function createSolanaVerifyService(deps: {
       let signature: string;
       try {
         signature = proof.tx_hash;
-        // Basic validation: Solana signatures are base58-encoded 64-88 chars
         if (!signature || signature.length < 64 || signature.length > 88) {
           throw new PaymentVerificationFailedError("Invalid Solana transaction signature");
         }
@@ -86,7 +85,6 @@ export function createSolanaVerifyService(deps: {
         );
       }
 
-      // Validate payer address matches the transaction fee payer
       const feePayer = parsedTx.transaction.message.accountKeys[0]?.pubkey.toBase58();
       if (!feePayer || feePayer.toLowerCase() !== proof.payer_address.toLowerCase()) {
         throw new PaymentVerificationFailedError(
@@ -94,14 +92,19 @@ export function createSolanaVerifyService(deps: {
         );
       }
 
-      // Resolve token config via TokenRegistry (preferred) or legacy fallback
-      const tokenConfig = deps.tokenRegistry?.get("solana", challenge.asset);
-      const tokenMint = tokenConfig?.address ?? SOLANA_USDC_MINT;
-      const tokenDecimals = tokenConfig?.decimals ?? 6;
-      const tokenSymbol = tokenConfig?.symbol ?? challenge.asset;
+      // Resolve token config from TokenRegistry
+      const tokenConfig = deps.tokenRegistry.get("solana", challenge.asset);
+      if (!tokenConfig) {
+        throw new PaymentVerificationFailedError(
+          `Unsupported asset: ${challenge.asset} on chain solana`,
+        );
+      }
+
+      const tokenMint = tokenConfig.address;
+      const tokenDecimals = tokenConfig.decimals;
+      const tokenSymbol = tokenConfig.symbol;
       const requiredAmount = parseSolanaAmount(challenge.amount, tokenDecimals);
 
-      // Build account index -> owner mapping from preTokenBalances for the token
       const accountOwners = new Map<number, string>();
       for (const pre of parsedTx.meta?.preTokenBalances ?? []) {
         if (pre.mint === tokenMint && pre.owner) {
@@ -114,13 +117,11 @@ export function createSolanaVerifyService(deps: {
         }
       }
 
-      // Also map accountKeys pubkey -> index for quick lookup
       const pubkeyToIndex = new Map<string, number>();
       parsedTx.transaction.message.accountKeys.forEach((acc, idx) => {
         pubkeyToIndex.set(acc.pubkey.toBase58(), idx);
       });
 
-      // Parse instructions looking for SPL Token transfers
       let totalReceived = 0n;
       let foundTransfer = false;
 
@@ -143,13 +144,11 @@ export function createSolanaVerifyService(deps: {
         const info = parsed.info;
         if (!info) continue;
 
-        // Check mint for transferChecked
         if (type === "transferChecked") {
           const mint = info.mint as string | undefined;
           if (mint !== tokenMint) continue;
         }
 
-        // Resolve source/destination owners via token balances
         const sourceAccount = info.source as string | undefined;
         const destAccount = info.destination as string | undefined;
         if (!sourceAccount || !destAccount) continue;

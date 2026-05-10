@@ -25,20 +25,6 @@ export function parseAmount(amount: string, decimals: number = 18): bigint {
 }
 
 /**
- * Return the number of decimals for a given asset symbol.
- * @deprecated Use TokenRegistry.get(chain, asset).decimals instead.
- * Kept for backward compatibility with existing callers.
- */
-export function getAssetDecimals(asset: string): number {
-  switch (asset.toUpperCase()) {
-    case "USDC":
-      return 6;
-    default:
-      return 18; // ETH, MATIC, BASE, etc.
-  }
-}
-
-/**
  * ERC-20 Transfer event signature
  * keccak256("Transfer(address,address,uint256)")
  */
@@ -54,7 +40,7 @@ export interface IEvmVerifyService {
 
 export function createEvmVerifyService(
   chainRegistry: IChainRegistry,
-  tokenRegistry?: ITokenRegistry,
+  tokenRegistry: ITokenRegistry,
 ): IEvmVerifyService {
   const clients = buildPublicClientMap(chainRegistry);
 
@@ -73,17 +59,19 @@ export function createEvmVerifyService(
         );
       }
 
-      // Resolve token config via TokenRegistry (preferred) or legacy fallback
-      const tokenConfig = tokenRegistry?.get(chainKey, challenge.asset);
-      const assetDecimals = tokenConfig?.decimals ?? getAssetDecimals(challenge.asset);
+      // Resolve token config from TokenRegistry
+      const tokenConfig = tokenRegistry.get(chainKey, challenge.asset);
+      if (!tokenConfig) {
+        throw new PaymentVerificationFailedError(
+          `Unsupported asset: ${challenge.asset} on chain ${proof.chain}`,
+        );
+      }
+
+      const assetDecimals = tokenConfig.decimals;
       const requiredAmount = parseAmount(challenge.amount, assetDecimals);
-      const isNative = tokenConfig
-        ? tokenConfig.type === "native"
-        : challenge.asset === "ETH" ||
-          challenge.asset === "MATIC" ||
-          challenge.asset === "BASE";
-      const assetSymbol = tokenConfig?.symbol ?? challenge.asset;
-      const tokenAddress = tokenConfig?.address ?? chainConfig.usdcAddress;
+      const isNative = tokenConfig.type === "native";
+      const assetSymbol = tokenConfig.symbol;
+      const tokenAddress = tokenConfig.address;
 
       const txHash = proof.tx_hash as `0x${string}`;
 
