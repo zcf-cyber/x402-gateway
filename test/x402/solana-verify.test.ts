@@ -4,6 +4,7 @@ import {
   SOLANA_USDC_MINT,
   SPL_TOKEN_PROGRAM_ID,
 } from "../../src/x402/verify/solana-verify.service.js";
+import { createTokenRegistry } from "../../src/x402/token-registry.service.js";
 import {
   PaymentVerificationFailedError,
   InsufficientPaymentError,
@@ -23,6 +24,14 @@ describe("SolanaVerifyService", () => {
   const payerAddress = "Payer111111111111111111111111111111111111111";
   const merchantAddress = "Merchant111111111111111111111111111111111111";
   const txSignature = "5VxPdN7fm6zQy1ZbYBHpJzgCCHkVWgTQe9FxWkBnjRaDqRqDqzrb7KMYE5YqRqDqzrb7KMYE5YqRqDqzrb7KMYE5";
+
+  const tokenRegistry = createTokenRegistry();
+  tokenRegistry.register("solana", "USDC", {
+    symbol: "USDC",
+    decimals: 6,
+    address: SOLANA_USDC_MINT,
+    type: "erc20",
+  });
 
   function buildMockConnection(getParsedTransactionResult: unknown) {
     return {
@@ -75,7 +84,7 @@ describe("SolanaVerifyService", () => {
     mockConn.getParsedTransaction.mockRejectedValue(new Error("Network error"));
     vi.mocked(Connection).mockImplementation(() => mockConn as unknown as import("@solana/web3.js").Connection);
 
-    const service = createSolanaVerifyService({ rpcUrl: mockRpcUrl });
+    const service = createSolanaVerifyService({ rpcUrl: mockRpcUrl, tokenRegistry });
     const proof = { tx_hash: txSignature, chain: "solana", payer_address: payerAddress };
 
     await expect(service.verifyPayment(proof, buildChallenge())).rejects.toThrow(
@@ -88,7 +97,7 @@ describe("SolanaVerifyService", () => {
     const mockConn = buildMockConnection(null);
     vi.mocked(Connection).mockImplementation(() => mockConn as unknown as import("@solana/web3.js").Connection);
 
-    const service = createSolanaVerifyService({ rpcUrl: mockRpcUrl });
+    const service = createSolanaVerifyService({ rpcUrl: mockRpcUrl, tokenRegistry });
     const proof = { tx_hash: "short", chain: "solana", payer_address: payerAddress };
 
     await expect(service.verifyPayment(proof, buildChallenge())).rejects.toThrow(
@@ -104,7 +113,7 @@ describe("SolanaVerifyService", () => {
     const mockConn = buildMockConnection(null);
     vi.mocked(Connection).mockImplementation(() => mockConn as unknown as import("@solana/web3.js").Connection);
 
-    const service = createSolanaVerifyService({ rpcUrl: mockRpcUrl });
+    const service = createSolanaVerifyService({ rpcUrl: mockRpcUrl, tokenRegistry });
     const proof = { tx_hash: txSignature, chain: "solana", payer_address: payerAddress };
 
     await expect(service.verifyPayment(proof, buildChallenge())).rejects.toThrow(
@@ -122,7 +131,7 @@ describe("SolanaVerifyService", () => {
     );
     vi.mocked(Connection).mockImplementation(() => mockConn as unknown as import("@solana/web3.js").Connection);
 
-    const service = createSolanaVerifyService({ rpcUrl: mockRpcUrl });
+    const service = createSolanaVerifyService({ rpcUrl: mockRpcUrl, tokenRegistry });
     const proof = { tx_hash: txSignature, chain: "solana", payer_address: payerAddress };
 
     await expect(service.verifyPayment(proof, buildChallenge())).rejects.toThrow(
@@ -146,7 +155,7 @@ describe("SolanaVerifyService", () => {
     });
     vi.mocked(Connection).mockImplementation(() => mockConn as unknown as import("@solana/web3.js").Connection);
 
-    const service = createSolanaVerifyService({ rpcUrl: mockRpcUrl });
+    const service = createSolanaVerifyService({ rpcUrl: mockRpcUrl, tokenRegistry });
     const proof = { tx_hash: txSignature, chain: "solana", payer_address: payerAddress };
 
     await expect(service.verifyPayment(proof, buildChallenge())).rejects.toThrow(
@@ -162,7 +171,7 @@ describe("SolanaVerifyService", () => {
     const mockConn = buildMockConnection(baseMockTx());
     vi.mocked(Connection).mockImplementation(() => mockConn as unknown as import("@solana/web3.js").Connection);
 
-    const service = createSolanaVerifyService({ rpcUrl: mockRpcUrl });
+    const service = createSolanaVerifyService({ rpcUrl: mockRpcUrl, tokenRegistry });
     const proof = { tx_hash: txSignature, chain: "solana", payer_address: payerAddress };
 
     await expect(service.verifyPayment(proof, buildChallenge())).rejects.toThrow(
@@ -186,7 +195,7 @@ describe("SolanaVerifyService", () => {
                 source: "TokenAccount1111111111111111111111111111",
                 destination: "TokenAccount2222222222222222222222222222",
                 mint: SOLANA_USDC_MINT,
-                tokenAmount: { amount: "100" }, // 0.0001 USDC
+                tokenAmount: { amount: "100" },
               },
             },
           },
@@ -203,7 +212,7 @@ describe("SolanaVerifyService", () => {
     );
     vi.mocked(Connection).mockImplementation(() => mockConn as unknown as import("@solana/web3.js").Connection);
 
-    const service = createSolanaVerifyService({ rpcUrl: mockRpcUrl });
+    const service = createSolanaVerifyService({ rpcUrl: mockRpcUrl, tokenRegistry });
     const proof = { tx_hash: txSignature, chain: "solana", payer_address: payerAddress };
 
     await expect(service.verifyPayment(proof, buildChallenge("0.001"))).rejects.toThrow(
@@ -242,7 +251,7 @@ describe("SolanaVerifyService", () => {
     );
     vi.mocked(Connection).mockImplementation(() => mockConn as unknown as import("@solana/web3.js").Connection);
 
-    const service = createSolanaVerifyService({ rpcUrl: mockRpcUrl });
+    const service = createSolanaVerifyService({ rpcUrl: mockRpcUrl, tokenRegistry });
     const proof = { tx_hash: txSignature, chain: "solana", payer_address: payerAddress };
 
     await expect(service.verifyPayment(proof, buildChallenge())).rejects.toThrow(
@@ -283,7 +292,7 @@ describe("SolanaVerifyService", () => {
     );
     vi.mocked(Connection).mockImplementation(() => mockConn as unknown as import("@solana/web3.js").Connection);
 
-    const service = createSolanaVerifyService({ rpcUrl: mockRpcUrl });
+    const service = createSolanaVerifyService({ rpcUrl: mockRpcUrl, tokenRegistry });
     const proof = { tx_hash: txSignature, chain: "solana", payer_address: payerAddress };
 
     const result = await service.verifyPayment(proof, buildChallenge("1.0"));

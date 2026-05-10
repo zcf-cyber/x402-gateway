@@ -5,6 +5,7 @@ import type {
 } from "../types.js";
 import type { IChainRegistry } from "../chain-registry.service.js";
 import { buildPublicClientMap } from "../chain-registry.service.js";
+import type { ITokenRegistry } from "../token-registry.service.js";
 import {
   PaymentVerificationFailedError,
   InsufficientPaymentError,
@@ -24,18 +25,6 @@ export function parseAmount(amount: string, decimals: number = 18): bigint {
 }
 
 /**
- * Return the number of decimals for a given asset symbol.
- */
-export function getAssetDecimals(asset: string): number {
-  switch (asset.toUpperCase()) {
-    case "USDC":
-      return 6;
-    default:
-      return 18; // ETH, MATIC, BASE, etc.
-  }
-}
-
-/**
  * ERC-20 Transfer event signature
  * keccak256("Transfer(address,address,uint256)")
  */
@@ -51,6 +40,7 @@ export interface IEvmVerifyService {
 
 export function createEvmVerifyService(
   chainRegistry: IChainRegistry,
+  tokenRegistry: ITokenRegistry,
 ): IEvmVerifyService {
   const clients = buildPublicClientMap(chainRegistry);
 
@@ -69,7 +59,20 @@ export function createEvmVerifyService(
         );
       }
 
-      const usdcContract = chainConfig.usdcAddress;
+      // Resolve token config from TokenRegistry
+      const tokenConfig = tokenRegistry.get(chainKey, challenge.asset);
+      if (!tokenConfig) {
+        throw new PaymentVerificationFailedError(
+          `Unsupported asset: ${challenge.asset} on chain ${proof.chain}`,
+        );
+      }
+
+      const assetDecimals = tokenConfig.decimals;
+      const requiredAmount = parseAmount(challenge.amount, assetDecimals);
+      const isNative = tokenConfig.type === "native";
+      const assetSymbol = tokenConfig.symbol;
+      const tokenAddress = tokenConfig.address;
+
       const txHash = proof.tx_hash as `0x${string}`;
 
       let receipt;
@@ -94,14 +97,7 @@ export function createEvmVerifyService(
         );
       }
 
-      const assetDecimals = getAssetDecimals(challenge.asset);
-      const requiredAmount = parseAmount(challenge.amount, assetDecimals);
-      const isNativeAsset =
-        challenge.asset === "ETH" ||
-        challenge.asset === "MATIC" ||
-        challenge.asset === "BASE";
-
-      if (isNativeAsset) {
+      if (isNative) {
         if (tx.value < requiredAmount) {
           throw new InsufficientPaymentError(
             challenge.amount,
@@ -115,7 +111,7 @@ export function createEvmVerifyService(
         }
       } else {
         const transferLogs = receipt.logs.filter((log) => {
-          if (log.address.toLowerCase() !== usdcContract.toLowerCase())
+          if (log.address.toLowerCase() !== tokenAddress.toLowerCase())
             return false;
           if (log.topics.length !== 3) return false;
           return log.topics[0] === ERC20_TRANSFER_SIGNATURE;
@@ -123,7 +119,7 @@ export function createEvmVerifyService(
 
         if (transferLogs.length === 0) {
           throw new PaymentVerificationFailedError(
-            "No USDC Transfer event found",
+            `No ${assetSymbol} Transfer event found`,
           );
         }
 

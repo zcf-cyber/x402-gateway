@@ -4,6 +4,7 @@ import type {
   PaymentProof,
   VerificationResult,
 } from "../types.js";
+import type { ITokenRegistry } from "../token-registry.service.js";
 import {
   PaymentVerificationFailedError,
   InsufficientPaymentError,
@@ -17,22 +18,19 @@ export const SPL_TOKEN_PROGRAM_ID = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
 /** SPL Token 2022 program ID */
 const SPL_TOKEN_2022_PROGRAM_ID = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
 
-/** USDC on Solana has 6 decimal places (not 18 like EVM) */
-const SOLANA_USDC_DECIMALS = 6;
-
 /**
- * Parse a decimal amount string to lamports (base units).
- * e.g. "0.001" -> 1000n (for 6-decimal USDC)
+ * Parse a decimal amount string to base units using specified decimals.
+ * e.g. "0.001" -> 1000n (for 6-decimal tokens like USDC)
  */
-function parseSolanaAmount(amount: string): bigint {
+function parseSolanaAmount(amount: string, decimals: number): bigint {
   if (amount.includes(".")) {
     const [whole, fraction = ""] = amount.split(".");
     const paddedFraction = fraction
-      .padEnd(SOLANA_USDC_DECIMALS, "0")
-      .slice(0, SOLANA_USDC_DECIMALS);
+      .padEnd(decimals, "0")
+      .slice(0, decimals);
     return BigInt(whole + paddedFraction);
   }
-  return BigInt(amount) * BigInt(10 ** SOLANA_USDC_DECIMALS);
+  return BigInt(amount);
 }
 
 export interface ISolanaVerifyService {
@@ -44,6 +42,7 @@ export interface ISolanaVerifyService {
 
 export function createSolanaVerifyService(deps: {
   rpcUrl: string;
+  tokenRegistry: ITokenRegistry;
 }): ISolanaVerifyService {
   const connection = new Connection(deps.rpcUrl, "confirmed");
 
@@ -55,7 +54,6 @@ export function createSolanaVerifyService(deps: {
       let signature: string;
       try {
         signature = proof.tx_hash;
-        // Basic validation: Solana signatures are base58-encoded 64-88 chars
         if (!signature || signature.length < 64 || signature.length > 88) {
           throw new PaymentVerificationFailedError("Invalid Solana transaction signature");
         }
@@ -87,7 +85,6 @@ export function createSolanaVerifyService(deps: {
         );
       }
 
-      // Validate payer address matches the transaction fee payer
       const feePayer = parsedTx.transaction.message.accountKeys[0]?.pubkey.toBase58();
       if (!feePayer || feePayer.toLowerCase() !== proof.payer_address.toLowerCase()) {
         throw new PaymentVerificationFailedError(
@@ -95,28 +92,36 @@ export function createSolanaVerifyService(deps: {
         );
       }
 
-      const requiredAmount = parseSolanaAmount(challenge.amount);
+      // Resolve token config from TokenRegistry
+      const tokenConfig = deps.tokenRegistry.get("solana", challenge.asset);
+      if (!tokenConfig) {
+        throw new PaymentVerificationFailedError(
+          `Unsupported asset: ${challenge.asset} on chain solana`,
+        );
+      }
 
-      // Build account index -> owner mapping from preTokenBalances for USDC
+      const tokenMint = tokenConfig.address;
+      const tokenDecimals = tokenConfig.decimals;
+      const tokenSymbol = tokenConfig.symbol;
+      const requiredAmount = parseSolanaAmount(challenge.amount, tokenDecimals);
+
       const accountOwners = new Map<number, string>();
       for (const pre of parsedTx.meta?.preTokenBalances ?? []) {
-        if (pre.mint === SOLANA_USDC_MINT && pre.owner) {
+        if (pre.mint === tokenMint && pre.owner) {
           accountOwners.set(pre.accountIndex, pre.owner);
         }
       }
       for (const post of parsedTx.meta?.postTokenBalances ?? []) {
-        if (post.mint === SOLANA_USDC_MINT && post.owner && !accountOwners.has(post.accountIndex)) {
+        if (post.mint === tokenMint && post.owner && !accountOwners.has(post.accountIndex)) {
           accountOwners.set(post.accountIndex, post.owner);
         }
       }
 
-      // Also map accountKeys pubkey -> index for quick lookup
       const pubkeyToIndex = new Map<string, number>();
       parsedTx.transaction.message.accountKeys.forEach((acc, idx) => {
         pubkeyToIndex.set(acc.pubkey.toBase58(), idx);
       });
 
-      // Parse instructions looking for SPL Token transfers
       let totalReceived = 0n;
       let foundTransfer = false;
 
@@ -139,13 +144,11 @@ export function createSolanaVerifyService(deps: {
         const info = parsed.info;
         if (!info) continue;
 
-        // Check mint for transferChecked
         if (type === "transferChecked") {
           const mint = info.mint as string | undefined;
-          if (mint !== SOLANA_USDC_MINT) continue;
+          if (mint !== tokenMint) continue;
         }
 
-        // Resolve source/destination owners via token balances
         const sourceAccount = info.source as string | undefined;
         const destAccount = info.destination as string | undefined;
         if (!sourceAccount || !destAccount) continue;
@@ -178,14 +181,14 @@ export function createSolanaVerifyService(deps: {
 
       if (!foundTransfer) {
         throw new PaymentVerificationFailedError(
-          "No USDC transfer from payer to merchant found in transaction",
+          `No ${tokenSymbol} transfer from payer to merchant found in transaction`,
         );
       }
 
       if (totalReceived < requiredAmount) {
         throw new InsufficientPaymentError(
           challenge.amount,
-          (Number(totalReceived) / 10 ** SOLANA_USDC_DECIMALS).toFixed(SOLANA_USDC_DECIMALS),
+          (Number(totalReceived) / 10 ** tokenDecimals).toFixed(tokenDecimals),
         );
       }
 
