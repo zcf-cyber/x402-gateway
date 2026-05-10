@@ -301,6 +301,14 @@ export async function buildApp(config: Config) {
   const chainRegistry = buildChainRegistry(config);
   const tokenRegistry = buildTokenRegistryFromChains(getSupportedChains(config.paymentNetwork));
 
+  // Register Solana assets (not covered by EVM chain config)
+  tokenRegistry.register("solana", "USDC", {
+    symbol: "USDC",
+    decimals: 6,
+    address: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" as `0x${string}`,
+    type: "erc20",
+  });
+
   const services: ServiceContainer = {
     providerRegistry,
     challengeService: createChallengeService({
