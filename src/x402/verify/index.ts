@@ -6,10 +6,6 @@ import type {
 import type { IChainRegistry } from "../chain-registry.service.js";
 import type { ITokenRegistry } from "../token-registry.service.js";
 import {
-  buildTokenRegistryFromChains,
-} from "../token-registry.service.js";
-import { getSupportedChains } from "../chain-config.js";
-import {
   createEvmVerifyService,
   type IEvmVerifyService,
 } from "./evm-verify.service.js";
@@ -29,20 +25,14 @@ export interface IPaymentVerifyService {
 export function createPaymentVerifyService(deps: {
   chainRegistry: IChainRegistry;
   solanaRpcUrl?: string;
-  tokenRegistry?: ITokenRegistry;
+  tokenRegistry: ITokenRegistry;
 }): IPaymentVerifyService {
-  // Build default token registry from static chain config when not provided.
-  // Production should always inject an explicit registry via app.ts.
-  const tokenRegistry: ITokenRegistry =
-    deps.tokenRegistry ??
-    buildTokenRegistryFromChains(getSupportedChains("testnet"));
-
   const evmVerifier: IEvmVerifyService = createEvmVerifyService(
     deps.chainRegistry,
-    tokenRegistry,
+    deps.tokenRegistry,
   );
   const solanaVerifier: ISolanaVerifyService | undefined = deps.solanaRpcUrl
-    ? createSolanaVerifyService({ rpcUrl: deps.solanaRpcUrl, tokenRegistry })
+    ? createSolanaVerifyService({ rpcUrl: deps.solanaRpcUrl, tokenRegistry: deps.tokenRegistry })
     : undefined;
 
   return {

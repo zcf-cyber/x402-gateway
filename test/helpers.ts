@@ -8,6 +8,7 @@ import {
   type IPaymentVerifyService,
 } from "../src/x402/verify/index.js";
 import { createChainRegistry } from "../src/x402/chain-registry.service.js";
+import { createTokenRegistry } from "../src/x402/token-registry.service.js";
 import {
   createReplayProtectionService,
   type IReplayProtectionService,
@@ -178,6 +179,16 @@ export function buildTestApp(overrides: Partial<ServiceContainer> = {}) {
           chain: { id: 8453, name: "Base", nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 }, rpcUrls: { default: { http: [] } } } as import("viem").Chain,
           usdcAddress: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
           rpcUrl: "https://sepolia.base.org",
+        });
+        return registry;
+      })(),
+      tokenRegistry: (() => {
+        const registry = createTokenRegistry();
+        registry.register("base", "USDC", {
+          symbol: "USDC",
+          decimals: 6,
+          address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+          type: "erc20",
         });
         return registry;
       })(),

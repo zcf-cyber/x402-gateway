@@ -30,7 +30,7 @@ function parseSolanaAmount(amount: string, decimals: number): bigint {
       .slice(0, decimals);
     return BigInt(whole + paddedFraction);
   }
-  return BigInt(amount) * BigInt(10 ** decimals);
+  return BigInt(amount);
 }
 
 export interface ISolanaVerifyService {

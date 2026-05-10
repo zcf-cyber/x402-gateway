@@ -58,6 +58,7 @@ import {
   type IPaymentVerifyService,
 } from "./x402/verify/index.js";
 import { getSupportedChains, buildAlchemyRpcUrls } from "./x402/chain-config.js";
+import { buildTokenRegistryFromChains } from "./x402/token-registry.service.js";
 import {
   createChainRegistry,
   type IChainRegistry,
@@ -297,6 +298,9 @@ export async function buildApp(config: Config) {
     created_at: string;
   }>();
 
+  const chainRegistry = buildChainRegistry(config);
+  const tokenRegistry = buildTokenRegistryFromChains(getSupportedChains(config.paymentNetwork));
+
   const services: ServiceContainer = {
     providerRegistry,
     challengeService: createChallengeService({
@@ -307,8 +311,9 @@ export async function buildApp(config: Config) {
       paymentAsset: config.paymentAsset,
     }),
     verifyService: createPaymentVerifyService({
-      chainRegistry: buildChainRegistry(config),
+      chainRegistry,
       solanaRpcUrl: config.solanaRpcUrl,
+      tokenRegistry,
     }),
     replayService: createReplayProtectionService(new InMemoryRedis()),
     routerService: createRouterService({ providerRegistry }),
