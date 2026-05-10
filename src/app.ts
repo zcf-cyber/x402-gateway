@@ -307,8 +307,6 @@ export async function buildApp(config: Config) {
       challengeSecret: config.challengeSecret,
       challengeTtlSeconds: config.challengeTtlSeconds,
       merchantAddress: config.merchantAddress,
-      paymentChain: config.paymentChain,
-      paymentAsset: config.paymentAsset,
     }),
     verifyService: createPaymentVerifyService({
       chainRegistry,

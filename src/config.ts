@@ -18,8 +18,8 @@ const configSchema = z.object({
 
   merchantAddress: z.string().startsWith("0x"),
   paymentNetwork: z.enum(["mainnet", "testnet"]).default("mainnet"),
-  paymentChain: z.string().default("base"),
-  paymentAsset: z.string().default("USDC"),
+  paymentChain: z.string().optional(),
+  paymentAsset: z.string().optional(),
 
   openaiApiKey: z.string().optional(),
   openaiBaseUrl: z.string().url().optional(),

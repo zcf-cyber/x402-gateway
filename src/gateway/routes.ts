@@ -47,12 +47,20 @@ export function registerRoutes(
     const idempotencyKey = request.headers["idempotency-key"] as
       | string
       | undefined;
+    const preferredAsset = (request.headers["x-402-preferred-asset"] as
+      | string
+      | undefined) ?? "USDC";
+    const preferredChain = (request.headers["x-402-preferred-chain"] as
+      | string
+      | undefined) ?? "base";
 
     // No payment headers -> return 402 with challenge
     if (!challengeHeader || !paymentHeader) {
       const requirements = await services.challengeService.generateChallenge(
         body,
         "0.001",
+        preferredAsset,
+        preferredChain,
       );
       return reply.status(402).send({
         error: { code: "payment_required", message: "Payment proof required" },

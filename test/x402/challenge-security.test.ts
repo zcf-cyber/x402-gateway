@@ -10,8 +10,6 @@ describe("ChallengeService Security", () => {
     challengeSecret: "test-secret-at-least-32-chars-long-for-testing",
     challengeTtlSeconds: 300,
     merchantAddress: "0x0000000000000000000000000000000000000001",
-    paymentChain: "base",
-    paymentAsset: "USDC",
   });
 
   it("should reject invalid challenge token due to wrong signature", async () => {
@@ -20,7 +18,7 @@ describe("ChallengeService Security", () => {
       messages: [{ role: "user" as const, content: "hello" }],
     };
 
-    const validChallenge = await service.generateChallenge(request, "0.001");
+    const validChallenge = await service.generateChallenge(request, "0.001", "USDC", "base");
     const tamperedToken = validChallenge.challenge_token.slice(0, -1) + "X";
 
     await expect(
@@ -51,11 +49,9 @@ describe("ChallengeService Security", () => {
       challengeSecret: "test-secret-at-least-32-chars-long-for-testing",
       challengeTtlSeconds: -1,
       merchantAddress: "0x0000000000000000000000000000000000000001",
-      paymentChain: "base",
-      paymentAsset: "USDC",
     });
 
-    const challenge = await shortLivedService.generateChallenge(request, "0.001");
+    const challenge = await shortLivedService.generateChallenge(request, "0.001", "USDC", "base");
 
     await expect(
       shortLivedService.verifyChallenge(challenge.challenge_token, request),
@@ -73,7 +69,7 @@ describe("ChallengeService Security", () => {
       messages: [{ role: "user" as const, content: "different content" }],
     };
 
-    const challenge = await service.generateChallenge(request1, "0.001");
+    const challenge = await service.generateChallenge(request1, "0.001", "USDC", "base");
 
     await expect(
       service.verifyChallenge(challenge.challenge_token, request2),
@@ -86,7 +82,7 @@ describe("ChallengeService Security", () => {
       messages: [{ role: "user" as const, content: "hello" }],
     };
 
-    const challenge = await service.generateChallenge(request, "0.001");
+    const challenge = await service.generateChallenge(request, "0.001", "USDC", "base");
 
     const result = await service.verifyChallenge(challenge.challenge_token, request);
 
