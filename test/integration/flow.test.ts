@@ -313,6 +313,8 @@ describe("End-to-End Integration Flow", () => {
             messages: [{ role: "user", content: "Hello" }],
           },
           "0.001",
+          "USDC",
+          "base",
         );
 
       // Manually tamper with the challenge to make it expired

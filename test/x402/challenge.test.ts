@@ -6,8 +6,6 @@ describe("ChallengeService", () => {
     challengeSecret: "test-secret-at-least-32-chars-long-for-testing",
     challengeTtlSeconds: 300,
     merchantAddress: "0x0000000000000000000000000000000000000001",
-    paymentChain: "base",
-    paymentAsset: "USDC",
   });
 
   it("should exist and have the expected interface", () => {
@@ -22,7 +20,7 @@ describe("ChallengeService", () => {
       model: "gpt-4",
       messages: [{ role: "user" as const, content: "hello" }],
     };
-    const result = await service.generateChallenge(request, "0.001");
+    const result = await service.generateChallenge(request, "0.001", "USDC", "base");
 
     expect(result).toHaveProperty("quote_id");
     expect(result).toHaveProperty("chain", "base");

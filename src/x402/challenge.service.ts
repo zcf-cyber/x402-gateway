@@ -7,6 +7,8 @@ export interface IChallengeService {
   generateChallenge(
     request: ChatCompletionRequest,
     estimatedCost: string,
+    asset: string,
+    chain: string,
   ): Promise<PaymentRequirements>;
   verifyChallenge(
     challengeToken: string,
@@ -19,21 +21,19 @@ export function createChallengeService(deps: {
   challengeSecret: string;
   challengeTtlSeconds: number;
   merchantAddress: string;
-  paymentChain: string;
-  paymentAsset: string;
 }): IChallengeService {
   const {
     challengeSecret,
     challengeTtlSeconds,
     merchantAddress,
-    paymentChain,
-    paymentAsset,
   } = deps;
 
   return {
     generateChallenge: async function (
       request: ChatCompletionRequest,
       estimatedCost: string,
+      asset: string,
+      chain: string,
     ): Promise<PaymentRequirements> {
       const { nanoid } = await import("nanoid");
       const quoteId = nanoid();
@@ -43,8 +43,8 @@ export function createChallengeService(deps: {
         quote_id: quoteId,
         request_hash: requestHash,
         amount: estimatedCost,
-        asset: paymentAsset,
-        chain: paymentChain,
+        asset,
+        chain,
         merchant_address: merchantAddress,
         expires_at: new Date(
           Date.now() + challengeTtlSeconds * 1000,
