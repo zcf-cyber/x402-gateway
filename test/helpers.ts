@@ -174,7 +174,12 @@ export function buildTestApp(overrides: Partial<ServiceContainer> = {}) {
       chainRegistry: (() => {
         const registry = createChainRegistry();
         registry.register("base", {
-          chain: { id: 8453, name: "Base", nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 }, rpcUrls: { default: { http: [] } } } as import("viem").Chain,
+          chain: {
+            id: 8453,
+            name: "Base",
+            nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+            rpcUrls: { default: { http: [] } },
+          } as import("viem").Chain,
           usdcAddress: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
           rpcUrl: "https://sepolia.base.org",
         });
@@ -200,6 +205,7 @@ export function buildTestApp(overrides: Partial<ServiceContainer> = {}) {
     ledgerService,
     traceService,
     receiptService: createReceiptService({ traceService, ledgerService }),
+    paymentChain: "base",
     ...overrides,
   };
 
@@ -259,6 +265,7 @@ export function buildMockedTestApp(options?: {
     ledgerService,
     traceService,
     receiptService: createReceiptService({ traceService, ledgerService }),
+    paymentChain: "base",
   };
 
   const app = Fastify({ logger: false });

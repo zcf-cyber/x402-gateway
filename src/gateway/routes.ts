@@ -47,12 +47,12 @@ export function registerRoutes(
     const idempotencyKey = request.headers["idempotency-key"] as
       | string
       | undefined;
-    const preferredAsset = (request.headers["x-402-preferred-asset"] as
-      | string
-      | undefined) ?? "USDC";
-    const preferredChain = (request.headers["x-402-preferred-chain"] as
-      | string
-      | undefined) ?? "base";
+    const preferredAsset =
+      (request.headers["x-402-preferred-asset"] as string | undefined) ??
+      "USDC";
+    const preferredChain =
+      (request.headers["x-402-preferred-chain"] as string | undefined) ??
+      services.paymentChain;
 
     // No payment headers -> return 402 with challenge
     if (!challengeHeader || !paymentHeader) {
@@ -75,9 +75,12 @@ export function registerRoutes(
         await services.challengeService.verifyChallenge(challengeHeader, body);
 
       // Cross-chain validation: ensure payment chain matches challenge chain
-      if (paymentProof.chain.toLowerCase() !== challengePayload.chain.toLowerCase()) {
+      if (
+        paymentProof.chain.toLowerCase() !==
+        challengePayload.chain.toLowerCase()
+      ) {
         throw new PaymentVerificationFailedError(
-          `Chain mismatch: challenge requires ${challengePayload.chain}, but proof is on ${paymentProof.chain}`
+          `Chain mismatch: challenge requires ${challengePayload.chain}, but proof is on ${paymentProof.chain}`,
         );
       }
 
