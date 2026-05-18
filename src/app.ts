@@ -57,7 +57,10 @@ import {
   createPaymentVerifyService,
   type IPaymentVerifyService,
 } from "./x402/verify/index.js";
-import { getSupportedChains, buildAlchemyRpcUrls } from "./x402/chain-config.js";
+import {
+  getSupportedChains,
+  buildAlchemyRpcUrls,
+} from "./x402/chain-config.js";
 import { buildTokenRegistryFromChains } from "./x402/token-registry.service.js";
 import {
   createChainRegistry,
@@ -103,6 +106,8 @@ export interface ServiceContainer {
   ledgerService: ILedgerService;
   traceService: ITraceService;
   receiptService: IReceiptService;
+  /** Default payment chain from PAYMENT_CHAIN env var. Falls back to "base" if unset. */
+  paymentChain: string;
 }
 
 function buildChainRegistry(config: Config): IChainRegistry {
@@ -196,7 +201,8 @@ export async function buildApp(config: Config) {
 
   // --- MiniMax M2.5 (value tier) ---
   if (config.minimaxApiKey) {
-    const minimaxBaseUrl = config.minimaxBaseUrl || "https://api.minimaxi.com/v1";
+    const minimaxBaseUrl =
+      config.minimaxBaseUrl || "https://api.minimaxi.com/v1";
     providerRegistry.register(
       "MiniMax-M2.5",
       new OpenAIAdapter(config.minimaxApiKey, minimaxBaseUrl),
@@ -210,7 +216,8 @@ export async function buildApp(config: Config) {
 
   // --- MiniMax M2.7 (premium tier) ---
   if (config.minimaxApiKey) {
-    const minimaxBaseUrl = config.minimaxBaseUrl || "https://api.minimaxi.com/v1";
+    const minimaxBaseUrl =
+      config.minimaxBaseUrl || "https://api.minimaxi.com/v1";
     providerRegistry.register(
       "MiniMax-M2.7",
       new OpenAIAdapter(config.minimaxApiKey, minimaxBaseUrl),
@@ -225,7 +232,8 @@ export async function buildApp(config: Config) {
   // --- Kimi K2.6 (Moonshot AI) ---
   // models.dev provider: moonshot, model: kimi-k2.6
   if (config.moonshotApiKey) {
-    const moonshotBaseUrl = config.moonshotBaseUrl || "https://api.moonshot.cn/v1";
+    const moonshotBaseUrl =
+      config.moonshotBaseUrl || "https://api.moonshot.cn/v1";
     providerRegistry.register(
       "kimi-k2.6",
       new OpenAIAdapter(config.moonshotApiKey, moonshotBaseUrl),
@@ -240,7 +248,8 @@ export async function buildApp(config: Config) {
   // --- GLM 5.1 (智谱 AI) ---
   // models.dev provider: zhipu, model: glm-5.1
   if (config.zhipuApiKey) {
-    const zhipuBaseUrl = config.zhipuBaseUrl || "https://open.bigmodel.cn/api/paas/v4";
+    const zhipuBaseUrl =
+      config.zhipuBaseUrl || "https://open.bigmodel.cn/api/paas/v4";
     providerRegistry.register(
       "glm-5.1",
       new OpenAIAdapter(config.zhipuApiKey, zhipuBaseUrl),
@@ -255,7 +264,8 @@ export async function buildApp(config: Config) {
   // --- DeepSeek V4 Pro (budget tier, flagship) ---
   // models.dev provider: deepseek, model: deepseek-v4-pro
   if (config.deepseekApiKey) {
-    const deepseekBaseUrl = config.deepseekBaseUrl || "https://api.deepseek.com/v1";
+    const deepseekBaseUrl =
+      config.deepseekBaseUrl || "https://api.deepseek.com/v1";
     providerRegistry.register(
       "deepseek-v4-pro",
       new OpenAIAdapter(config.deepseekApiKey, deepseekBaseUrl),
@@ -270,7 +280,8 @@ export async function buildApp(config: Config) {
   // --- DeepSeek V4 Flash (budget tier, fastest/cheapest) ---
   // models.dev provider: deepseek, model: deepseek-v4-flash
   if (config.deepseekApiKey) {
-    const deepseekBaseUrl = config.deepseekBaseUrl || "https://api.deepseek.com/v1";
+    const deepseekBaseUrl =
+      config.deepseekBaseUrl || "https://api.deepseek.com/v1";
     providerRegistry.register(
       "deepseek-v4-flash",
       new OpenAIAdapter(config.deepseekApiKey, deepseekBaseUrl),
@@ -289,17 +300,30 @@ export async function buildApp(config: Config) {
    * In-memory usage store for MVP stage.
    * Production environment must migrate to PostgreSQL for persistence.
    */
-  const usageStore = new Map<string, {
-    request_id: string;
-    model_id: string;
-    prompt_tokens: number;
-    completion_tokens: number;
-    total_tokens: number;
-    created_at: string;
-  }>();
+  const usageStore = new Map<
+    string,
+    {
+      request_id: string;
+      model_id: string;
+      prompt_tokens: number;
+      completion_tokens: number;
+      total_tokens: number;
+      created_at: string;
+    }
+  >();
 
   const chainRegistry = buildChainRegistry(config);
-  const tokenRegistry = buildTokenRegistryFromChains(getSupportedChains(config.paymentNetwork));
+  const tokenRegistry = buildTokenRegistryFromChains(
+    getSupportedChains(config.paymentNetwork),
+  );
+
+  // Register Solana assets (not covered by EVM chain config)
+  tokenRegistry.register("solana", "USDC", {
+    symbol: "USDC",
+    decimals: 6,
+    address: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" as `0x${string}`,
+    type: "erc20",
+  });
 
   // Register Solana assets (not covered by EVM chain config)
   tokenRegistry.register("solana", "USDC", {
@@ -347,6 +371,7 @@ export async function buildApp(config: Config) {
     ledgerService,
     traceService,
     receiptService: createReceiptService({ traceService, ledgerService }),
+    paymentChain: config.paymentChain ?? "base",
   };
 
   registerRoutes(app, services);

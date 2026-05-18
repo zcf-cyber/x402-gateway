@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  buildTestApp,
   buildMockedTestApp,
   createMockPaymentProof,
   encodePaymentProof,
@@ -701,6 +702,56 @@ describe("End-to-End Integration Flow", () => {
       expect(body.data.length).toBeGreaterThan(0);
       expect(body.data[0]).toHaveProperty("id");
       expect(body.data[0]).toHaveProperty("pricing");
+    });
+  });
+
+  describe("PAYMENT_CHAIN Configuration", () => {
+    it.each([
+      { chain: "base", label: "Base Mainnet" },
+      { chain: "arbitrum", label: "Arbitrum" },
+      { chain: "optimism", label: "Optimism" },
+      { chain: "polygon", label: "Polygon" },
+      { chain: "ethereum-sepolia", label: "Ethereum Sepolia Testnet" },
+      { chain: "base-sepolia", label: "Base Sepolia Testnet" },
+    ])(
+      "should generate challenge with chain=$chain ($label) when paymentChain is configured",
+      async ({ chain }) => {
+        const app = buildTestApp({ paymentChain: chain });
+
+        const response = await app.inject({
+          method: "POST",
+          url: "/v1/chat/completions",
+          payload: {
+            model: "openai/gpt-4o",
+            messages: [{ role: "user", content: "Hello" }],
+          },
+        });
+
+        expect(response.statusCode).toBe(402);
+        const body = response.json();
+        expect(body.payment_requirements.chain).toBe(chain);
+      },
+    );
+
+    it("x-402-preferred-chain header should override paymentChain config", async () => {
+      const app = buildTestApp({ paymentChain: "base" });
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/chat/completions",
+        payload: {
+          model: "openai/gpt-4o",
+          messages: [{ role: "user", content: "Hello" }],
+        },
+        headers: {
+          "x-402-preferred-chain": "arbitrum",
+        },
+      });
+
+      expect(response.statusCode).toBe(402);
+      const body = response.json();
+      // Header should take priority over config
+      expect(body.payment_requirements.chain).toBe("arbitrum");
     });
   });
 });

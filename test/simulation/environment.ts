@@ -323,8 +323,6 @@ export function buildSimulationEnvironment(
       challengeSecret: "sim-secret-at-least-32-chars-long-for-simulations",
       challengeTtlSeconds: 300,
       merchantAddress: "0x0000000000000000000000000000000000000001",
-      paymentChain: "base",
-      paymentAsset: "USDC",
     }),
     verifyService: createSimulatedVerifyService({
       latencyMs: config.verificationLatencyMs,
@@ -336,6 +334,7 @@ export function buildSimulationEnvironment(
     ledgerService,
     traceService,
     receiptService: createReceiptService({ traceService, ledgerService }),
+    paymentChain: "base",
   };
 
   // Wrap router to track metrics
