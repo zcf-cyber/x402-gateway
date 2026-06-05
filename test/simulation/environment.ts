@@ -15,7 +15,7 @@ import { createLedgerService } from "../../src/billing/ledger.service.js";
 import { createTraceService } from "../../src/audit/trace.service.js";
 import { createReceiptService } from "../../src/audit/receipt.service.js";
 import type { ServiceContainer } from "../../src/app.js";
-import type { ChatCompletionRequest, RoutingMode } from "../../src/types.js";
+import type { ChatCompletionRequest } from "../../src/types.js";
 import type { PaymentProof, VerificationResult } from "../../src/x402/types.js";
 import type {
   UpstreamResponse,
@@ -225,7 +225,6 @@ export function createSimulatedReplayService() {
  */
 export function createSimulatedRouterService(
   providers: SimulatedProvider[],
-  options?: { mode: RoutingMode },
 ) {
   const adapters = new Map(
     providers.map((p) => [p.name, createSimulatedAdapter(p)]),
@@ -234,44 +233,23 @@ export function createSimulatedRouterService(
   return {
     route: async (
       request: ChatCompletionRequest,
-      mode: RoutingMode,
     ): Promise<{ decision: RouteDecision; response: UpstreamResponse }> => {
-      const effectiveMode = options?.mode ?? mode;
+      const [providerName, modelName] = request.model.split("/");
+      const adapter = adapters.get(providerName);
 
-      if (effectiveMode === "manual") {
-        const [providerName, modelName] = request.model.split("/");
-        const adapter = adapters.get(providerName);
-
-        if (!adapter) {
-          throw new Error(`Provider ${providerName} not found`);
-        }
-
-        const response = await adapter.execute(
-          request,
-          modelName || request.model,
-        );
-
-        const decision: RouteDecision = {
-          selected_model: request.model,
-          fallback_chain: [],
-          score_summary: "manual selection",
-          route_proof_hash: `rph_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
-        };
-
-        return { decision, response };
+      if (!adapter) {
+        throw new Error(`Provider ${providerName} not found`);
       }
 
-      // Auto mode - simple round-robin for simulation
-      const providerList = Array.from(adapters.values());
-      const selectedAdapter =
-        providerList[Math.floor(Math.random() * providerList.length)];
-
-      const response = await selectedAdapter.execute(request, request.model);
+      const response = await adapter.execute(
+        request,
+        modelName || request.model,
+      );
 
       const decision: RouteDecision = {
-        selected_model: response.model_used,
+        selected_model: request.model,
         fallback_chain: [],
-        score_summary: "auto selection (simulated)",
+        score_summary: "manual selection",
         route_proof_hash: `rph_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
       };
 
@@ -341,11 +319,11 @@ export function buildSimulationEnvironment(
   const originalRoute = services.routerService.route.bind(
     services.routerService,
   );
-  services.routerService.route = async (request, mode) => {
+  services.routerService.route = async (request) => {
     const startTime = Date.now();
     requestCount++;
     try {
-      const result = await originalRoute(request, mode);
+      const result = await originalRoute(request);
       totalLatency += Date.now() - startTime;
       return result;
     } catch (error) {

@@ -23,7 +23,7 @@ import { createLedgerService } from "../src/billing/ledger.service.js";
 import { createTraceService } from "../src/audit/trace.service.js";
 import { createReceiptService } from "../src/audit/receipt.service.js";
 import type { ServiceContainer } from "../src/app.js";
-import type { ChatCompletionRequest, RoutingMode } from "../src/types.js";
+import type { ChatCompletionRequest } from "../src/types.js";
 import type {
   ChallengePayload,
   PaymentProof,
@@ -104,12 +104,12 @@ export function createMockRouterService(options?: {
   latencyMs?: number;
 }): IRouterService {
   return {
-    route: async (request: ChatCompletionRequest, mode: RoutingMode) => {
+    route: async (request: ChatCompletionRequest) => {
       if (options?.shouldFail) {
         throw new Error("Routing failed");
       }
 
-      const modelId = mode === "manual" ? request.model : "openai/gpt-4o";
+      const modelId = request.model;
       const latencyMs = options?.latencyMs ?? 100;
 
       const response: UpstreamResponse = {
@@ -134,8 +134,7 @@ export function createMockRouterService(options?: {
         fallback_chain: options?.fallbackAttempt
           ? [`model-failed-${options.fallbackAttempt}`]
           : [],
-        score_summary:
-          mode === "manual" ? "manual selection" : "auto selection",
+        score_summary: "manual selection",
         route_proof_hash: "rph_test_hash",
       };
 

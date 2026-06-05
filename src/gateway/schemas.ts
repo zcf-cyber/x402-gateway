@@ -11,7 +11,6 @@ export const chatCompletionBodySchema = z.object({
   ).min(1),
   temperature: z.number().min(0).max(2).optional(),
   stream: z.boolean().optional().default(false),
-  routing_mode: z.enum(['manual', 'auto']).optional().default('manual'),
 });
 
 /** Zod schema for x402 payment headers (present on retry after 402) */

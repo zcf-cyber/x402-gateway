@@ -1,16 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { createRouterService } from "../../src/router/router.service.js";
-import { createFallbackService } from "../../src/router/fallback.service.js";
-import { createPolicyEngine } from "../../src/router/policy.js";
 import { createProviderRegistry } from "../../src/provider/registry.js";
 import { BaseProviderAdapter } from "../../src/provider/adapter.js";
 import type { ChatCompletionRequest } from "../../src/types.js";
 import type { UpstreamResponse } from "../../src/provider/types.js";
-import type {
-  RouteDecision,
-  RouteCandidate,
-  RoutingContext,
-} from "../../src/router/types.js";
+import type { RouteDecision } from "../../src/router/types.js";
 import type { ProviderAdapter } from "../../src/provider/types.js";
 
 // ============================================================================
@@ -62,11 +56,8 @@ class MockOpenAIAdapter extends BaseProviderAdapter {
 }
 
 class FailingMockAdapter extends BaseProviderAdapter {
-  private failHealthCheck: boolean;
-
-  constructor(failHealthCheck = true) {
+  constructor() {
     super("failing-provider");
-    this.failHealthCheck = failHealthCheck;
   }
 
   async execute(): Promise<UpstreamResponse> {
@@ -74,7 +65,7 @@ class FailingMockAdapter extends BaseProviderAdapter {
   }
 
   async healthCheck(): Promise<boolean> {
-    return !this.failHealthCheck;
+    return false;
   }
 }
 
@@ -98,7 +89,7 @@ describe("RouterService", () => {
     });
   });
 
-  describe("manual routing mode", () => {
+  describe("manual routing", () => {
     it("should route request to registered model successfully", async () => {
       const registry = createProviderRegistry();
       const mockAdapter = new MockOpenAIAdapter();
@@ -117,7 +108,7 @@ describe("RouterService", () => {
         temperature: 0.7,
       };
 
-      const result = await service.route(request, "manual");
+      const result = await service.route(request);
 
       expect(result).toBeDefined();
       expect(result.decision).toBeDefined();
@@ -143,7 +134,7 @@ describe("RouterService", () => {
         messages: [{ role: "user", content: "Hello" }],
       };
 
-      const result = await service.route(request, "manual");
+      const result = await service.route(request);
 
       expect(result.decision).toMatchObject<Partial<RouteDecision>>({
         selected_model: modelId,
@@ -172,7 +163,7 @@ describe("RouterService", () => {
         messages: [{ role: "user", content: "Hello" }],
       };
 
-      const result = await service.route(request, "manual");
+      const result = await service.route(request);
 
       expect(result.decision.route_proof_hash).toMatch(/^rph_[a-f0-9]{64}$/);
       expect(result.decision.route_proof_hash.length).toBe(68);
@@ -212,7 +203,7 @@ describe("RouterService", () => {
         messages: [{ role: "user", content: "Hello" }],
       };
 
-      const result = await service.route(request, "manual");
+      const result = await service.route(request);
 
       expect(result.response.choices).toHaveLength(1);
       expect(result.response.choices[0].message.content).toBe("Test response");
@@ -228,7 +219,7 @@ describe("RouterService", () => {
         messages: [{ role: "user", content: "hello" }],
       };
 
-      await expect(service.route(request, "manual")).rejects.toThrow(
+      await expect(service.route(request)).rejects.toThrow(
         "Model not found: non-existent-model",
       );
     });
@@ -276,99 +267,24 @@ describe("RouterService", () => {
 
       const service = createRouterService({ providerRegistry: registry });
 
-      const openaiResult = await service.route(
-        {
-          model: "openai/gpt-4o",
-          messages: [{ role: "user", content: "Hello" }],
-        },
-        "manual",
-      );
+      const openaiResult = await service.route({
+        model: "openai/gpt-4o",
+        messages: [{ role: "user", content: "Hello" }],
+      });
       expect(openaiResult.decision.selected_model).toBe("openai/gpt-4o");
       expect(openaiResult.response.choices[0].message.content).toBe(
         "OpenAI response",
       );
 
-      const anthropicResult = await service.route(
-        {
-          model: "anthropic/claude-3-opus",
-          messages: [{ role: "user", content: "Hello" }],
-        },
-        "manual",
-      );
+      const anthropicResult = await service.route({
+        model: "anthropic/claude-3-opus",
+        messages: [{ role: "user", content: "Hello" }],
+      });
       expect(anthropicResult.decision.selected_model).toBe(
         "anthropic/claude-3-opus",
       );
       expect(anthropicResult.response.choices[0].message.content).toBe(
         "Anthropic response",
-      );
-    });
-  });
-
-  describe("auto routing mode", () => {
-    it("route should throw when no models available for auto mode", async () => {
-      const registry = createProviderRegistry();
-      const service = createRouterService({ providerRegistry: registry });
-      const request: ChatCompletionRequest = {
-        model: "gpt-4",
-        messages: [{ role: "user", content: "hello" }],
-      };
-
-      // When no models are registered, auto mode should throw "Not implemented"
-      await expect(service.route(request, "auto")).rejects.toThrow(
-        "Not implemented",
-      );
-    });
-
-    it("should route via auto mode when models are available", async () => {
-      const registry = createProviderRegistry();
-      const expectedResponse: UpstreamResponse = {
-        model_used: "openai/gpt-3.5-turbo",
-        choices: [
-          {
-            index: 0,
-            message: { role: "assistant", content: "Auto routed response" },
-            finish_reason: "stop",
-          },
-        ],
-        usage: {
-          prompt_tokens: 10,
-          completion_tokens: 5,
-          total_tokens: 15,
-        },
-        latency_ms: 100,
-      };
-
-      const mockAdapter = new MockOpenAIAdapter(expectedResponse);
-
-      // Register a cheaper model (will be selected by auto mode)
-      registry.register("openai/gpt-3.5-turbo", mockAdapter, {
-        input_usd_per_token: "0.000005",
-        output_usd_per_token: "0.000015",
-        effective_at: new Date().toISOString(),
-      });
-
-      // Register an expensive model (fallback option)
-      registry.register("openai/gpt-4o", mockAdapter, {
-        input_usd_per_token: "0.00001",
-        output_usd_per_token: "0.00003",
-        effective_at: new Date().toISOString(),
-      });
-
-      const service = createRouterService({ providerRegistry: registry });
-      const request: ChatCompletionRequest = {
-        model: "gpt-4",
-        messages: [{ role: "user", content: "hello" }],
-      };
-
-      const result = await service.route(request, "auto");
-
-      // Auto mode should select the cheaper model
-      expect(result.decision.selected_model).toBe("openai/gpt-3.5-turbo");
-      expect(result.decision.score_summary).toContain("auto-selected");
-      expect(result.decision.route_proof_hash).toMatch(/^rph_/);
-      expect(result.decision.fallback_chain).toContain("openai/gpt-4o");
-      expect(result.response.choices[0].message.content).toBe(
-        "Auto routed response",
       );
     });
   });
@@ -391,7 +307,7 @@ describe("RouterService", () => {
         messages: [{ role: "user", content: "Hello" }],
       };
 
-      await expect(service.route(request, "manual")).rejects.toThrow(
+      await expect(service.route(request)).rejects.toThrow(
         "Provider is down",
       );
     });
@@ -412,202 +328,8 @@ describe("RouterService", () => {
         messages: [],
       };
 
-      const result = await service.route(request, "manual");
+      const result = await service.route(request);
       expect(result.decision.selected_model).toBe("openai/gpt-4o");
-    });
-  });
-});
-
-// ============================================================================
-// FallbackService Tests
-// ============================================================================
-
-describe("FallbackService", () => {
-  const service = createFallbackService();
-
-  describe("basic functionality", () => {
-    it("should exist and have the expected interface", () => {
-      expect(service).toBeDefined();
-      expect(typeof service.executeWithFallback).toBe("function");
-    });
-  });
-
-  describe("fallback chain execution", () => {
-    it("should throw UpstreamUnavailableError when all models fail", async () => {
-      const failFn = async (_modelId: string) => {
-        throw new Error("provider down");
-      };
-
-      await expect(
-        service.executeWithFallback(["model-a", "model-b"], failFn),
-      ).rejects.toThrow("All models in fallback chain failed");
-    });
-
-    it("should return first successful result", async () => {
-      let attempt = 0;
-      const executeFn = async (modelId: string) => {
-        attempt++;
-        if (attempt === 1) throw new Error("first fails");
-        return {
-          model_used: modelId,
-          choices: [
-            {
-              index: 0,
-              message: { role: "assistant", content: "ok" },
-              finish_reason: "stop",
-            },
-          ],
-          usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
-          latency_ms: 100,
-        };
-      };
-
-      const result = await service.executeWithFallback(
-        ["model-a", "model-b"],
-        executeFn,
-      );
-      expect(result.modelId).toBe("model-b");
-      expect(result.response.model_used).toBe("model-b");
-    });
-
-    it("should try all models in order", async () => {
-      const attemptedModels: string[] = [];
-      const executeFn = async (modelId: string) => {
-        attemptedModels.push(modelId);
-        throw new Error(`${modelId} failed`);
-      };
-
-      await expect(
-        service.executeWithFallback(
-          ["model-1", "model-2", "model-3"],
-          executeFn,
-        ),
-      ).rejects.toThrow();
-
-      expect(attemptedModels).toEqual(["model-1", "model-2", "model-3"]);
-    });
-
-    it("should return immediately on first success", async () => {
-      const attemptedModels: string[] = [];
-      const executeFn = async (modelId: string) => {
-        attemptedModels.push(modelId);
-        if (modelId === "model-2") {
-          return {
-            model_used: modelId,
-            choices: [
-              {
-                index: 0,
-                message: { role: "assistant", content: "success" },
-                finish_reason: "stop",
-              },
-            ],
-            usage: {
-              prompt_tokens: 10,
-              completion_tokens: 5,
-              total_tokens: 15,
-            },
-            latency_ms: 100,
-          };
-        }
-        throw new Error(`${modelId} failed`);
-      };
-
-      const result = await service.executeWithFallback(
-        ["model-1", "model-2", "model-3"],
-        executeFn,
-      );
-
-      expect(attemptedModels).toEqual(["model-1", "model-2"]);
-      expect(result.modelId).toBe("model-2");
-    });
-  });
-
-  describe("edge cases", () => {
-    it("should handle empty fallback chain", async () => {
-      await expect(
-        service.executeWithFallback([], async () => ({}) as never),
-      ).rejects.toThrow("All models in fallback chain failed");
-    });
-
-    it("should handle single model success", async () => {
-      const executeFn = async (modelId: string) => ({
-        model_used: modelId,
-        choices: [
-          {
-            index: 0,
-            message: { role: "assistant", content: "ok" },
-            finish_reason: "stop",
-          },
-        ],
-        usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
-        latency_ms: 100,
-      });
-
-      const result = await service.executeWithFallback(
-        ["single-model"],
-        executeFn,
-      );
-      expect(result.modelId).toBe("single-model");
-    });
-
-    it("should handle single model failure", async () => {
-      await expect(
-        service.executeWithFallback(["failing-model"], async () => {
-          throw new Error("failed");
-        }),
-      ).rejects.toThrow("All models in fallback chain failed");
-    });
-  });
-});
-
-// ============================================================================
-// PolicyEngine Tests
-// ============================================================================
-
-describe("PolicyEngine", () => {
-  const engine = createPolicyEngine();
-
-  describe("basic interface", () => {
-    it("should exist and have the expected interface", () => {
-      expect(engine).toBeDefined();
-      expect(typeof engine.scoreModels).toBe("function");
-      expect(typeof engine.selectBest).toBe("function");
-    });
-  });
-
-  describe("selectBest", () => {
-    it("selectBest should throw on empty candidates", () => {
-      expect(() => engine.selectBest([])).toThrow("No candidates available");
-    });
-
-    it("should select the only candidate", () => {
-      const candidates: RouteCandidate[] = [
-        { model_id: "model-a", score: 1.0, reason: "test" },
-      ];
-      const result = engine.selectBest(candidates);
-      expect(result.model_id).toBe("model-a");
-    });
-
-    it("should select highest scored candidate", () => {
-      const candidates: RouteCandidate[] = [
-        { model_id: "model-a", score: 0.5, reason: "test" },
-        { model_id: "model-b", score: 0.9, reason: "test" },
-        { model_id: "model-c", score: 0.7, reason: "test" },
-      ];
-      const result = engine.selectBest(candidates);
-      expect(result.model_id).toBe("model-a");
-    });
-  });
-
-  describe("scoreModels (not implemented)", () => {
-    it("should throw not implemented error", () => {
-      const context: RoutingContext = {
-        requested_model: "gpt-4",
-        routing_mode: "auto",
-        available_models: ["model-a", "model-b"],
-      };
-
-      expect(() => engine.scoreModels(context)).toThrow("Not implemented");
     });
   });
 });
@@ -636,7 +358,7 @@ describe("Router + ProviderRegistry Integration", () => {
       temperature: 0.7,
     };
 
-    const result = await router.route(request, "manual");
+    const result = await router.route(request);
 
     expect(result).toHaveProperty("decision");
     expect(result).toHaveProperty("response");
@@ -666,13 +388,10 @@ describe("Router + ProviderRegistry Integration", () => {
     });
 
     const router = createRouterService({ providerRegistry: registry });
-    const result = await router.route(
-      {
-        model: "openai/gpt-4o",
-        messages: [{ role: "user", content: "Hello" }],
-      },
-      "manual",
-    );
+    const result = await router.route({
+      model: "openai/gpt-4o",
+      messages: [{ role: "user", content: "Hello" }],
+    });
 
     expect(result.decision.selected_model).toBe("openai/gpt-4o");
     expect(result.response.model_used).toBe("openai/gpt-4o");

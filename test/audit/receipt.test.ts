@@ -83,20 +83,20 @@ describe("ReceiptService", () => {
 
     it("should return audit record with fallback chain", async () => {
       const requestId = "req-fallback" as RequestId;
-      await traceService.startTrace(requestId, "hash456", "auto");
+      await traceService.startTrace(requestId, "hash456", "manual");
       await traceService.completeTrace(requestId, {
         ...createTestCompleteData(),
         selectedModel: "openai/gpt-4o-mini",
-        fallbackChain: ["openai/gpt-4o", "anthropic/claude-3"],
-        scoreSummary: "Selected: openai/gpt-4o-mini | Fallbacks tried: openai/gpt-4o, anthropic/claude-3",
+        fallbackChain: ["anthropic/claude-3"],
+        scoreSummary: "Selected: openai/gpt-4o-mini | Fallbacks tried: anthropic/claude-3",
         promptTokens: 80,
         completionTokens: 40,
         totalTokens: 120,
       });
       const result = await receiptService.getByRequestId(requestId);
       expect(result).not.toBeNull();
-      expect(result?.route_decision.fallback_chain).toEqual(["openai/gpt-4o", "anthropic/claude-3"]);
-      expect(result?.routing_mode).toBe("auto");
+      expect(result?.route_decision.fallback_chain).toEqual(["anthropic/claude-3"]);
+      expect(result?.routing_mode).toBe("manual");
     });
 
 
@@ -166,7 +166,7 @@ describe("ReceiptService", () => {
       await ledgerService.commit(createTestLedgerEntry(requestId1, "quote-list-1"));
 
       const requestId2 = "req-list-2" as RequestId;
-      await traceService.startTrace(requestId2, "hash-list-2", "auto");
+      await traceService.startTrace(requestId2, "hash-list-2", "manual");
       await traceService.completeTrace(requestId2, { ...createTestCompleteData(), selectedModel: "openai/gpt-4o-mini", quoteId: "quote-list-2" });
       await ledgerService.commit(createTestLedgerEntry(requestId2, "quote-list-2"));
       const result = await receiptService.listReceipts(10);
@@ -234,7 +234,7 @@ describe("TraceService", () => {
 
     it("should complete trace with full audit data", async () => {
       const requestId = "req-complete-test" as RequestId;
-      await traceService.startTrace(requestId, "hash456", "auto");
+      await traceService.startTrace(requestId, "hash456", "manual");
       await traceService.completeTrace(requestId, {
         ...createTestCompleteData(),
         selectedModel: "openai/gpt-4o",
@@ -308,7 +308,7 @@ describe("TraceService", () => {
 
     it("should return trace for existing request", async () => {
       const requestId = "req-exists" as RequestId;
-      await traceService.startTrace(requestId, "hash-exists", "auto");
+      await traceService.startTrace(requestId, "hash-exists", "manual");
       const result = await traceService.getTrace(requestId);
       expect(result).not.toBeNull();
       expect(result?.request_id).toBe(requestId);
