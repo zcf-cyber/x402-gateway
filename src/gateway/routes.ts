@@ -56,9 +56,18 @@ export function registerRoutes(
 
     // No payment headers -> return 402 with challenge
     if (!challengeHeader || !paymentHeader) {
+      // Estimate payment amount based on model pricing + token estimation
+      const pricing = services.providerRegistry.getModelPricing(body.model);
+      const estimatedTokens = services.paymentService.estimateTokens(body);
+      const estimatedCost = services.paymentService.estimateTotalCost(
+        estimatedTokens,
+        pricing,
+        services.platformFeeBps,
+      );
+
       const requirements = await services.challengeService.generateChallenge(
         body,
-        "0.001",
+        estimatedCost,
         preferredAsset,
         preferredChain,
       );
@@ -135,7 +144,17 @@ export function registerRoutes(
           completion_tokens: response.usage.completion_tokens,
           total_tokens: response.usage.total_tokens,
         };
-        const cost = services.costService.calculateCost(usage, pricing, 50);
+        const cost = services.costService.calculateCost(
+          usage,
+          pricing,
+          services.platformFeeBps,
+        );
+
+        // Validate: actual cost must not exceed authorized amount (x402 upto semantics)
+        services.paymentService.validatePayment(
+          cost.total_usd,
+          challengePayload.amount,
+        );
 
         // Commit to ledger
         await services.ledgerService.commit({

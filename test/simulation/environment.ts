@@ -11,6 +11,7 @@ import { createProviderRegistry } from "../../src/provider/registry.js";
 import { createChallengeService } from "../../src/x402/challenge.service.js";
 import { createMeterService } from "../../src/billing/meter.service.js";
 import { createCostService } from "../../src/billing/cost.service.js";
+import { createPaymentService } from "../../src/billing/payment.service.js";
 import { createLedgerService } from "../../src/billing/ledger.service.js";
 import { createTraceService } from "../../src/audit/trace.service.js";
 import { createReceiptService } from "../../src/audit/receipt.service.js";
@@ -274,6 +275,7 @@ export function buildSimulationEnvironment(
   };
 } {
   const providerRegistry = createProviderRegistry();
+  const costService = createCostService();
   const ledgerService = createLedgerService();
   const traceService = createTraceService();
 
@@ -308,7 +310,9 @@ export function buildSimulationEnvironment(
     replayService: createSimulatedReplayService(),
     routerService: createSimulatedRouterService(config.providers),
     meterService: createMeterService({ recordUsage: async () => {} }),
-    costService: createCostService(),
+    costService,
+    paymentService: createPaymentService({ costService }),
+    platformFeeBps: 50,
     ledgerService,
     traceService,
     receiptService: createReceiptService({ traceService, ledgerService }),

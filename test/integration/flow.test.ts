@@ -26,7 +26,9 @@ describe("End-to-End Integration Flow", () => {
       expect(body.payment_requirements).toBeDefined();
       expect(body.payment_requirements.challenge_token).toBeDefined();
       expect(body.payment_requirements.quote_id).toBeDefined();
-      expect(body.payment_requirements.amount).toBe("0.001");
+      // Amount is now estimated from model pricing + token estimation (Issue #45)
+      expect(body.payment_requirements.amount).toBeDefined();
+      expect(parseFloat(body.payment_requirements.amount)).toBeGreaterThan(0);
       expect(body.payment_requirements.asset).toBe("USDC");
       expect(body.payment_requirements.chain).toBe("base");
     });
@@ -305,14 +307,25 @@ describe("End-to-End Integration Flow", () => {
     it("should reject expired challenge token", async () => {
       const { app, services } = buildMockedTestApp();
 
-      // Create an expired challenge
+      // Create an expired challenge with properly estimated amount
+      const challengeBody = {
+        model: "openai/gpt-4o",
+        messages: [{ role: "user", content: "Hello" }],
+      };
+      const challengePricing =
+        services.providerRegistry.getModelPricing("openai/gpt-4o");
+      const challengeTokens =
+        services.paymentService.estimateTokens(challengeBody);
+      const estimatedCost = services.paymentService.estimateTotalCost(
+        challengeTokens,
+        challengePricing,
+        services.platformFeeBps,
+      );
+
       const expiredChallenge =
         await services.challengeService.generateChallenge(
-          {
-            model: "openai/gpt-4o",
-            messages: [{ role: "user", content: "Hello" }],
-          },
-          "0.001",
+          challengeBody,
+          estimatedCost,
           "USDC",
           "base",
         );
