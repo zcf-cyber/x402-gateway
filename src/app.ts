@@ -87,6 +87,10 @@ import {
   type ILedgerService,
 } from "./billing/ledger.service.js";
 import {
+  createPaymentService,
+  type IPaymentService,
+} from "./billing/payment.service.js";
+import {
   createTraceService,
   type ITraceService,
 } from "./audit/trace.service.js";
@@ -106,6 +110,10 @@ export interface ServiceContainer {
   ledgerService: ILedgerService;
   traceService: ITraceService;
   receiptService: IReceiptService;
+  /** Modular payment estimation & validation layer (decoupled from x402 challenge). */
+  paymentService: IPaymentService;
+  /** Platform fee in basis points (e.g., 50 = 0.5%). From PLATFORM_FEE_BPS config. */
+  platformFeeBps: number;
   /** Default payment chain from PAYMENT_CHAIN env var. Falls back to "base" if unset. */
   paymentChain: string;
 }
@@ -293,6 +301,7 @@ export async function buildApp(config: Config) {
     );
   }
 
+  const costService = createCostService();
   const ledgerService = createLedgerService();
   const traceService = createTraceService();
 
@@ -367,7 +376,9 @@ export async function buildApp(config: Config) {
         });
       },
     }),
-    costService: createCostService(),
+    costService,
+    paymentService: createPaymentService({ costService }),
+    platformFeeBps: config.platformFeeBps,
     ledgerService,
     traceService,
     receiptService: createReceiptService({ traceService, ledgerService }),

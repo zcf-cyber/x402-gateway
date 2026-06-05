@@ -5,3 +5,5 @@ export { createCostService } from './cost.service.js';
 export type { ICostService } from './cost.service.js';
 export { createLedgerService } from './ledger.service.js';
 export type { ILedgerService } from './ledger.service.js';
+export { createPaymentService } from './payment.service.js';
+export type { IPaymentService, EstimatedTokens } from './payment.service.js';

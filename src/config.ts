@@ -41,7 +41,7 @@ const configSchema = z.object({
   alchemyApiKey: z.string().optional(),
   solanaRpcUrl: z.string().url().optional(),
 
-  platformFeeBps: z.coerce.number().default(500),
+  platformFeeBps: z.coerce.number().default(50),
 });
 
 export type Config = z.infer<typeof configSchema>;

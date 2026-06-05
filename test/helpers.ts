@@ -20,6 +20,7 @@ import {
 import { createMeterService } from "../src/billing/meter.service.js";
 import { createCostService } from "../src/billing/cost.service.js";
 import { createLedgerService } from "../src/billing/ledger.service.js";
+import { createPaymentService } from "../src/billing/payment.service.js";
 import { createTraceService } from "../src/audit/trace.service.js";
 import { createReceiptService } from "../src/audit/receipt.service.js";
 import type { ServiceContainer } from "../src/app.js";
@@ -159,6 +160,7 @@ export function buildTestApp(overrides: Partial<ServiceContainer> = {}) {
     effective_at: new Date().toISOString(),
   });
 
+  const costService = createCostService();
   const ledgerService = createLedgerService();
   const traceService = createTraceService();
 
@@ -200,7 +202,9 @@ export function buildTestApp(overrides: Partial<ServiceContainer> = {}) {
     meterService: createMeterService({
       recordUsage: async () => {},
     }),
-    costService: createCostService(),
+    costService,
+    paymentService: createPaymentService({ costService }),
+    platformFeeBps: 50,
     ledgerService,
     traceService,
     receiptService: createReceiptService({ traceService, ledgerService }),
@@ -232,6 +236,7 @@ export function buildMockedTestApp(options?: {
     effective_at: new Date().toISOString(),
   });
 
+  const costService = createCostService();
   const ledgerService = createLedgerService();
   const traceService = createTraceService();
   const replayService = createMockReplayService();
@@ -260,7 +265,9 @@ export function buildMockedTestApp(options?: {
     replayService,
     routerService,
     meterService,
-    costService: createCostService(),
+    costService,
+    paymentService: createPaymentService({ costService }),
+    platformFeeBps: 50,
     ledgerService,
     traceService,
     receiptService: createReceiptService({ traceService, ledgerService }),
