@@ -64,14 +64,14 @@ describe("ReceiptService", () => {
 
     it("should return null when trace exists but is incomplete", async () => {
       const requestId = "req-incomplete" as RequestId;
-      await traceService.startTrace(requestId, "hash123", "manual");
+      await traceService.startTrace(requestId, "hash123");
       const result = await receiptService.getByRequestId(requestId);
       expect(result).toBeNull();
     });
 
     it("should return audit record when trace is completed", async () => {
       const requestId = "req-complete" as RequestId;
-      await traceService.startTrace(requestId, "hash123", "manual");
+      await traceService.startTrace(requestId, "hash123");
       await traceService.completeTrace(requestId, createTestCompleteData());
       const result = await receiptService.getByRequestId(requestId);
       expect(result).not.toBeNull();
@@ -83,26 +83,25 @@ describe("ReceiptService", () => {
 
     it("should return audit record with fallback chain", async () => {
       const requestId = "req-fallback" as RequestId;
-      await traceService.startTrace(requestId, "hash456", "auto");
+      await traceService.startTrace(requestId, "hash456");
       await traceService.completeTrace(requestId, {
         ...createTestCompleteData(),
         selectedModel: "openai/gpt-4o-mini",
-        fallbackChain: ["openai/gpt-4o", "anthropic/claude-3"],
-        scoreSummary: "Selected: openai/gpt-4o-mini | Fallbacks tried: openai/gpt-4o, anthropic/claude-3",
+        fallbackChain: ["anthropic/claude-3"],
+        scoreSummary: "Selected: openai/gpt-4o-mini | Fallbacks tried: anthropic/claude-3",
         promptTokens: 80,
         completionTokens: 40,
         totalTokens: 120,
       });
       const result = await receiptService.getByRequestId(requestId);
       expect(result).not.toBeNull();
-      expect(result?.route_decision.fallback_chain).toEqual(["openai/gpt-4o", "anthropic/claude-3"]);
-      expect(result?.routing_mode).toBe("auto");
+      expect(result?.route_decision.fallback_chain).toEqual(["anthropic/claude-3"]);
     });
 
 
     it("should return audit record even when ledger entry is missing", async () => {
       const requestId = "req-no-ledger" as RequestId;
-      await traceService.startTrace(requestId, "hash789", "manual");
+      await traceService.startTrace(requestId, "hash789");
       await traceService.completeTrace(requestId, createTestCompleteData());
       const result = await receiptService.getByRequestId(requestId);
       expect(result).not.toBeNull();
@@ -120,7 +119,7 @@ describe("ReceiptService", () => {
 
     it("should return false when trace exists but ledger entry missing", async () => {
       const requestId = "req-no-ledger" as RequestId;
-      await traceService.startTrace(requestId, "hash789", "manual");
+      await traceService.startTrace(requestId, "hash789");
       await traceService.completeTrace(requestId, createTestCompleteData());
       const result = await receiptService.hasReceipt(requestId);
       expect(result).toBe(false);
@@ -128,7 +127,7 @@ describe("ReceiptService", () => {
 
     it("should return false when trace is pending", async () => {
       const requestId = "req-pending" as RequestId;
-      await traceService.startTrace(requestId, "hash000", "manual");
+      await traceService.startTrace(requestId, "hash000");
       const result = await receiptService.hasReceipt(requestId);
       expect(result).toBe(false);
     });
@@ -136,7 +135,7 @@ describe("ReceiptService", () => {
 
     it("should return false when trace is failed", async () => {
       const requestId = "req-failed" as RequestId;
-      await traceService.startTrace(requestId, "hash-fail", "manual");
+      await traceService.startTrace(requestId, "hash-fail");
       await traceService.failTrace(requestId, "Upstream timeout");
       const result = await receiptService.hasReceipt(requestId);
       expect(result).toBe(false);
@@ -144,7 +143,7 @@ describe("ReceiptService", () => {
 
     it("should return true when both trace and ledger entry exist", async () => {
       const requestId = "req-full" as RequestId;
-      await traceService.startTrace(requestId, "hash111", "manual");
+      await traceService.startTrace(requestId, "hash111");
       await traceService.completeTrace(requestId, { ...createTestCompleteData(), quoteId: "quote-full" });
       await ledgerService.commit(createTestLedgerEntry(requestId, "quote-full"));
       const result = await receiptService.hasReceipt(requestId);
@@ -161,12 +160,12 @@ describe("ReceiptService", () => {
 
     it("should return request IDs with complete receipts", async () => {
       const requestId1 = "req-list-1" as RequestId;
-      await traceService.startTrace(requestId1, "hash-list-1", "manual");
+      await traceService.startTrace(requestId1, "hash-list-1");
       await traceService.completeTrace(requestId1, { ...createTestCompleteData(), quoteId: "quote-list-1" });
       await ledgerService.commit(createTestLedgerEntry(requestId1, "quote-list-1"));
 
       const requestId2 = "req-list-2" as RequestId;
-      await traceService.startTrace(requestId2, "hash-list-2", "auto");
+      await traceService.startTrace(requestId2, "hash-list-2");
       await traceService.completeTrace(requestId2, { ...createTestCompleteData(), selectedModel: "openai/gpt-4o-mini", quoteId: "quote-list-2" });
       await ledgerService.commit(createTestLedgerEntry(requestId2, "quote-list-2"));
       const result = await receiptService.listReceipts(10);
@@ -177,7 +176,7 @@ describe("ReceiptService", () => {
     it("should respect limit parameter", async () => {
       for (let i = 0; i < 3; i++) {
         const requestId = `req-limit-${i}` as RequestId;
-        await traceService.startTrace(requestId, `hash-limit-${i}`, "manual");
+        await traceService.startTrace(requestId, `hash-limit-${i}`);
         await traceService.completeTrace(requestId, { ...createTestCompleteData(), quoteId: `quote-limit-${i}` });
         await ledgerService.commit(createTestLedgerEntry(requestId, `quote-limit-${i}`));
       }
@@ -187,11 +186,11 @@ describe("ReceiptService", () => {
 
     it("should not include incomplete traces", async () => {
       const completeId = "req-complete-for-list" as RequestId;
-      await traceService.startTrace(completeId, "hash-complete", "manual");
+      await traceService.startTrace(completeId, "hash-complete");
       await traceService.completeTrace(completeId, { ...createTestCompleteData(), quoteId: "quote-complete-list" });
       await ledgerService.commit(createTestLedgerEntry(completeId, "quote-complete-list"));
       const pendingId = "req-pending-for-list" as RequestId;
-      await traceService.startTrace(pendingId, "hash-pending", "manual");
+      await traceService.startTrace(pendingId, "hash-pending");
       const result = await receiptService.listReceipts(10);
       expect(result).toContain("req-complete-for-list");
       expect(result).not.toContain("req-pending-for-list");
@@ -199,11 +198,11 @@ describe("ReceiptService", () => {
 
     it("should not include failed traces", async () => {
       const completeId = "req-complete-failed-test" as RequestId;
-      await traceService.startTrace(completeId, "hash-complete-failed", "manual");
+      await traceService.startTrace(completeId, "hash-complete-failed");
       await traceService.completeTrace(completeId, { ...createTestCompleteData(), quoteId: "quote-complete-failed" });
       await ledgerService.commit(createTestLedgerEntry(completeId, "quote-complete-failed"));
       const failedId = "req-failed-for-list" as RequestId;
-      await traceService.startTrace(failedId, "hash-failed", "manual");
+      await traceService.startTrace(failedId, "hash-failed");
       await traceService.failTrace(failedId, "Upstream error");
       const result = await receiptService.listReceipts(10);
       expect(result).toContain("req-complete-failed-test");
@@ -224,17 +223,16 @@ describe("TraceService", () => {
   describe("startTrace and completeTrace", () => {
     it("should create trace with pending status", async () => {
       const requestId = "req-pending-test" as RequestId;
-      await traceService.startTrace(requestId, "hash123", "manual");
+      await traceService.startTrace(requestId, "hash123");
       const trace = await traceService.getTrace(requestId);
       expect(trace).not.toBeNull();
       expect(trace?.status).toBe("pending");
       expect(trace?.request_hash).toBe("hash123");
-      expect(trace?.routing_mode).toBe("manual");
     });
 
     it("should complete trace with full audit data", async () => {
       const requestId = "req-complete-test" as RequestId;
-      await traceService.startTrace(requestId, "hash456", "auto");
+      await traceService.startTrace(requestId, "hash456");
       await traceService.completeTrace(requestId, {
         ...createTestCompleteData(),
         selectedModel: "openai/gpt-4o",
@@ -266,7 +264,7 @@ describe("TraceService", () => {
   describe("failTrace", () => {
     it("should mark trace as failed with reason", async () => {
       const requestId = "req-fail-test" as RequestId;
-      await traceService.startTrace(requestId, "hash789", "manual");
+      await traceService.startTrace(requestId, "hash789");
       await traceService.failTrace(requestId, "Upstream timeout");
       const trace = await traceService.getTrace(requestId);
       expect(trace).not.toBeNull();
@@ -288,13 +286,13 @@ describe("TraceService", () => {
 
     it("should throw error when trace is pending", async () => {
       const requestId = "req-pending-audit" as RequestId;
-      await traceService.startTrace(requestId, "hash-pending", "manual");
+      await traceService.startTrace(requestId, "hash-pending");
       await expect(traceService.getAuditRecord(requestId)).rejects.toThrow(`Trace not completed for request_id: ${requestId}`);
     });
 
     it("should throw error when trace is failed", async () => {
       const requestId = "req-failed-audit" as RequestId;
-      await traceService.startTrace(requestId, "hash-failed", "manual");
+      await traceService.startTrace(requestId, "hash-failed");
       await traceService.failTrace(requestId, "Some error");
       await expect(traceService.getAuditRecord(requestId)).rejects.toThrow(`Trace not completed for request_id: ${requestId}`);
     });
@@ -308,7 +306,7 @@ describe("TraceService", () => {
 
     it("should return trace for existing request", async () => {
       const requestId = "req-exists" as RequestId;
-      await traceService.startTrace(requestId, "hash-exists", "auto");
+      await traceService.startTrace(requestId, "hash-exists");
       const result = await traceService.getTrace(requestId);
       expect(result).not.toBeNull();
       expect(result?.request_id).toBe(requestId);
@@ -323,18 +321,18 @@ describe("TraceService", () => {
     });
 
     it("should return traces in reverse chronological order", async () => {
-      await traceService.startTrace("req-newest" as RequestId, "hash1", "manual");
-      await traceService.startTrace("req-middle" as RequestId, "hash2", "manual");
-      await traceService.startTrace("req-oldest" as RequestId, "hash3", "manual");
+      await traceService.startTrace("req-newest" as RequestId, "hash1");
+      await traceService.startTrace("req-middle" as RequestId, "hash2");
+      await traceService.startTrace("req-oldest" as RequestId, "hash3");
       const traces = await traceService.listTraces();
       expect(traces[0].request_id).toBe("req-newest");
       expect(traces[2].request_id).toBe("req-oldest");
     });
 
     it("should respect limit parameter", async () => {
-      await traceService.startTrace("req-1" as RequestId, "hash1", "manual");
-      await traceService.startTrace("req-2" as RequestId, "hash2", "manual");
-      await traceService.startTrace("req-3" as RequestId, "hash3", "manual");
+      await traceService.startTrace("req-1" as RequestId, "hash1");
+      await traceService.startTrace("req-2" as RequestId, "hash2");
+      await traceService.startTrace("req-3" as RequestId, "hash3");
       const traces = await traceService.listTraces(2);
       expect(traces).toHaveLength(2);
     });
@@ -342,8 +340,8 @@ describe("TraceService", () => {
 
   describe("clearAll", () => {
     it("should clear all traces", async () => {
-      await traceService.startTrace("req-clear-1" as RequestId, "hash1", "manual");
-      await traceService.startTrace("req-clear-2" as RequestId, "hash2", "manual");
+      await traceService.startTrace("req-clear-1" as RequestId, "hash1");
+      await traceService.startTrace("req-clear-2" as RequestId, "hash2");
       await traceService.clearAll();
       const traces = await traceService.listTraces();
       expect(traces).toEqual([]);

@@ -1,21 +1,23 @@
 import { createHash } from "crypto";
-import type { ChatCompletionRequest, RoutingMode } from "../types.js";
+import type { ChatCompletionRequest } from "../types.js";
 import type { UpstreamResponse } from "../provider/types.js";
 import type { RouteDecision } from "./types.js";
 import type { IProviderRegistry } from "../provider/registry.js";
 
 export interface IRouterService {
   /**
-   * Orchestrate the full routing flow:
-   * 1. If manual mode: use the specified model directly
-   * 2. If auto mode: call PolicyEngine.scoreModels -> selectBest -> build fallback chain
-   * 3. Execute via FallbackService
-   * 4. Generate route_proof_hash (hash of decision + actual execution)
-   * 5. Return both the decision metadata and the upstream response
+   * Route the request to the specified model.
+   *
+   * Only manual routing is supported. Auto model selection (PolicyEngine)
+   * has been removed — it conflicts with the x402 payment contract (Issue #71).
+   *
+   * TODO(Issue #80): Integrate FallbackService for provider-level high-availability
+   * failover. When the primary provider for a model fails, automatically retry
+   * with alternate providers serving the same model (not different models).
+   * This keeps the x402 payment contract intact (same model = same price).
    */
   route(
     request: ChatCompletionRequest,
-    mode: RoutingMode,
   ): Promise<{ decision: RouteDecision; response: UpstreamResponse }>;
 }
 
@@ -27,90 +29,36 @@ export function createRouterService(deps: {
   return {
     async route(
       request: ChatCompletionRequest,
-      mode: RoutingMode,
     ): Promise<{ decision: RouteDecision; response: UpstreamResponse }> {
-      if (mode === "manual") {
-        // Manual mode: use the specified model directly
-        const modelId = request.model;
-        const adapter = providerRegistry.getAdapter(modelId);
+      // Manual mode: use the specified model directly
+      // TODO(Issue #80): After primary provider execution, on failure,
+      // wrap with FallbackService.executeWithFallback() using the same
+      // model's alternate provider list.
+      const modelId = request.model;
+      const adapter = providerRegistry.getAdapter(modelId);
 
-        // Execute the request
-        const response = await adapter.execute(request, modelId);
+      // Execute the request
+      const response = await adapter.execute(request, modelId);
 
-        // Build RouteDecision for manual mode
-        const decision: RouteDecision = {
-          selected_model: modelId,
-          fallback_chain: [],
-          score_summary: "manual selection",
-          route_proof_hash: "", // Will be computed below
-        };
-
-        // Generate route_proof_hash (hash of decision + response)
-        const hashInput = JSON.stringify({
-          decision,
-          response: {
-            model_used: response.model_used,
-            usage: response.usage,
-          },
-        });
-        decision.route_proof_hash = `rph_${createHash("sha256").update(hashInput).digest("hex")}`;
-
-        return { decision, response };
-      }
-
-      // Auto mode: Use PolicyEngine + FallbackService
-      const { createPolicyEngine } = await import("./policy.js");
-      const policyEngine = createPolicyEngine({
-        getModelCatalog: () => providerRegistry.listModels(),
-        isModelAvailable: (modelId) => {
-          try {
-            providerRegistry.getAdapter(modelId);
-            return true;
-          } catch {
-            return false;
-          }
-        },
-      });
-
-      const context = {
-        requested_model: request.model,
-        routing_mode: "auto" as const,
-        available_models: providerRegistry.listModels().map((m) => m.id),
-      };
-
-      const { selected, fallbackChain } = policyEngine.decideAutoRoute(context);
-
-      // Use FallbackService to execute
-      const { createFallbackService } = await import("./fallback.service.js");
-      const fallbackService = createFallbackService();
-
-      const executeFn = (modelId: string) =>
-        providerRegistry.getAdapter(modelId).execute(request, modelId);
-
-      const result = await fallbackService.executeWithFallback(
-        [selected.model_id, ...fallbackChain],
-        executeFn,
-      );
-
-      // Build RouteDecision
+      // Build RouteDecision for manual mode
       const decision: RouteDecision = {
-        selected_model: result.modelId,
-        fallback_chain: fallbackChain,
-        score_summary: `auto-selected: ${selected.reason}`,
+        selected_model: modelId,
+        fallback_chain: [],
+        score_summary: "manual selection",
         route_proof_hash: "", // Will be computed below
       };
 
-      // Generate route_proof_hash
+      // Generate route_proof_hash (hash of decision + response)
       const hashInput = JSON.stringify({
         decision,
         response: {
-          model_used: result.response.model_used,
-          usage: result.response.usage,
+          model_used: response.model_used,
+          usage: response.usage,
         },
       });
       decision.route_proof_hash = `rph_${createHash("sha256").update(hashInput).digest("hex")}`;
 
-      return { decision, response: result.response };
+      return { decision, response };
     },
   };
 }

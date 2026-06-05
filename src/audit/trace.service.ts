@@ -1,4 +1,4 @@
-import type { RequestId, RoutingMode } from '../types.js';
+import type { RequestId } from '../types.js';
 import type { RequestTrace, AuditQueryResult } from './types.js';
 
 /**
@@ -50,9 +50,8 @@ export interface ITraceService {
    *
    * @param requestId - Unique request identifier
    * @param requestHash - Hash of the request for integrity verification
-   * @param routingMode - 'manual' or 'auto' routing mode
    */
-  startTrace(requestId: RequestId, requestHash: string, routingMode: RoutingMode): Promise<void>;
+  startTrace(requestId: RequestId, requestHash: string): Promise<void>;
 
   /**
    * Finalize the trace with route decision, usage, cost, and payment data.
@@ -148,14 +147,12 @@ export function createTraceService(deps?: TraceServiceDeps): ITraceService {
     async startTrace(
       requestId: RequestId,
       requestHash: string,
-      routingMode: RoutingMode,
     ): Promise<void> {
       const now = new Date().toISOString();
 
       traces.set(requestId, {
         request_id: requestId,
         request_hash: requestHash,
-        routing_mode: routingMode,
         status: 'pending',
         created_at: now,
       });
@@ -164,7 +161,6 @@ export function createTraceService(deps?: TraceServiceDeps): ITraceService {
         log('Trace started', {
           requestId,
           requestHash,
-          routingMode,
           timestamp: now,
         });
       }
@@ -272,7 +268,6 @@ export function createTraceService(deps?: TraceServiceDeps): ITraceService {
       return {
         request_id: trace.request_id,
         request_hash: trace.request_hash,
-        routing_mode: trace.routing_mode,
         route_decision: trace.routeDecision,
         usage: trace.usage,
         cost: trace.cost,

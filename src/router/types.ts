@@ -5,17 +5,3 @@ export interface RouteDecision {
   score_summary: string;
   route_proof_hash: string;
 }
-
-/** Candidate model with scoring */
-export interface RouteCandidate {
-  model_id: string;
-  score: number;
-  reason: string;
-}
-
-/** Context for routing decisions */
-export interface RoutingContext {
-  requested_model: string;
-  routing_mode: 'manual' | 'auto';
-  available_models: string[];
-}

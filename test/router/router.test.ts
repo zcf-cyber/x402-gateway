@@ -1,16 +1,11 @@
 import { describe, it, expect } from "vitest";
 import { createRouterService } from "../../src/router/router.service.js";
 import { createFallbackService } from "../../src/router/fallback.service.js";
-import { createPolicyEngine } from "../../src/router/policy.js";
 import { createProviderRegistry } from "../../src/provider/registry.js";
 import { BaseProviderAdapter } from "../../src/provider/adapter.js";
 import type { ChatCompletionRequest } from "../../src/types.js";
 import type { UpstreamResponse } from "../../src/provider/types.js";
-import type {
-  RouteDecision,
-  RouteCandidate,
-  RoutingContext,
-} from "../../src/router/types.js";
+import type { RouteDecision } from "../../src/router/types.js";
 import type { ProviderAdapter } from "../../src/provider/types.js";
 
 // ============================================================================
@@ -62,11 +57,8 @@ class MockOpenAIAdapter extends BaseProviderAdapter {
 }
 
 class FailingMockAdapter extends BaseProviderAdapter {
-  private failHealthCheck: boolean;
-
-  constructor(failHealthCheck = true) {
+  constructor() {
     super("failing-provider");
-    this.failHealthCheck = failHealthCheck;
   }
 
   async execute(): Promise<UpstreamResponse> {
@@ -74,7 +66,7 @@ class FailingMockAdapter extends BaseProviderAdapter {
   }
 
   async healthCheck(): Promise<boolean> {
-    return !this.failHealthCheck;
+    return false;
   }
 }
 
@@ -117,7 +109,7 @@ describe("RouterService", () => {
         temperature: 0.7,
       };
 
-      const result = await service.route(request, "manual");
+      const result = await service.route(request);
 
       expect(result).toBeDefined();
       expect(result.decision).toBeDefined();
@@ -143,7 +135,7 @@ describe("RouterService", () => {
         messages: [{ role: "user", content: "Hello" }],
       };
 
-      const result = await service.route(request, "manual");
+      const result = await service.route(request);
 
       expect(result.decision).toMatchObject<Partial<RouteDecision>>({
         selected_model: modelId,
@@ -172,7 +164,7 @@ describe("RouterService", () => {
         messages: [{ role: "user", content: "Hello" }],
       };
 
-      const result = await service.route(request, "manual");
+      const result = await service.route(request);
 
       expect(result.decision.route_proof_hash).toMatch(/^rph_[a-f0-9]{64}$/);
       expect(result.decision.route_proof_hash.length).toBe(68);
@@ -212,7 +204,7 @@ describe("RouterService", () => {
         messages: [{ role: "user", content: "Hello" }],
       };
 
-      const result = await service.route(request, "manual");
+      const result = await service.route(request);
 
       expect(result.response.choices).toHaveLength(1);
       expect(result.response.choices[0].message.content).toBe("Test response");
@@ -228,7 +220,7 @@ describe("RouterService", () => {
         messages: [{ role: "user", content: "hello" }],
       };
 
-      await expect(service.route(request, "manual")).rejects.toThrow(
+      await expect(service.route(request)).rejects.toThrow(
         "Model not found: non-existent-model",
       );
     });
@@ -304,75 +296,6 @@ describe("RouterService", () => {
     });
   });
 
-  describe("auto routing mode", () => {
-    it("route should throw when no models available for auto mode", async () => {
-      const registry = createProviderRegistry();
-      const service = createRouterService({ providerRegistry: registry });
-      const request: ChatCompletionRequest = {
-        model: "gpt-4",
-        messages: [{ role: "user", content: "hello" }],
-      };
-
-      // When no models are registered, auto mode should throw "Not implemented"
-      await expect(service.route(request, "auto")).rejects.toThrow(
-        "Not implemented",
-      );
-    });
-
-    it("should route via auto mode when models are available", async () => {
-      const registry = createProviderRegistry();
-      const expectedResponse: UpstreamResponse = {
-        model_used: "openai/gpt-3.5-turbo",
-        choices: [
-          {
-            index: 0,
-            message: { role: "assistant", content: "Auto routed response" },
-            finish_reason: "stop",
-          },
-        ],
-        usage: {
-          prompt_tokens: 10,
-          completion_tokens: 5,
-          total_tokens: 15,
-        },
-        latency_ms: 100,
-      };
-
-      const mockAdapter = new MockOpenAIAdapter(expectedResponse);
-
-      // Register a cheaper model (will be selected by auto mode)
-      registry.register("openai/gpt-3.5-turbo", mockAdapter, {
-        input_usd_per_token: "0.000005",
-        output_usd_per_token: "0.000015",
-        effective_at: new Date().toISOString(),
-      });
-
-      // Register an expensive model (fallback option)
-      registry.register("openai/gpt-4o", mockAdapter, {
-        input_usd_per_token: "0.00001",
-        output_usd_per_token: "0.00003",
-        effective_at: new Date().toISOString(),
-      });
-
-      const service = createRouterService({ providerRegistry: registry });
-      const request: ChatCompletionRequest = {
-        model: "gpt-4",
-        messages: [{ role: "user", content: "hello" }],
-      };
-
-      const result = await service.route(request, "auto");
-
-      // Auto mode should select the cheaper model
-      expect(result.decision.selected_model).toBe("openai/gpt-3.5-turbo");
-      expect(result.decision.score_summary).toContain("auto-selected");
-      expect(result.decision.route_proof_hash).toMatch(/^rph_/);
-      expect(result.decision.fallback_chain).toContain("openai/gpt-4o");
-      expect(result.response.choices[0].message.content).toBe(
-        "Auto routed response",
-      );
-    });
-  });
-
   describe("error handling", () => {
     it("should propagate adapter execution errors", async () => {
       const registry = createProviderRegistry();
@@ -391,7 +314,7 @@ describe("RouterService", () => {
         messages: [{ role: "user", content: "Hello" }],
       };
 
-      await expect(service.route(request, "manual")).rejects.toThrow(
+      await expect(service.route(request)).rejects.toThrow(
         "Provider is down",
       );
     });
@@ -412,7 +335,7 @@ describe("RouterService", () => {
         messages: [],
       };
 
-      const result = await service.route(request, "manual");
+      const result = await service.route(request);
       expect(result.decision.selected_model).toBe("openai/gpt-4o");
     });
   });
@@ -556,58 +479,6 @@ describe("FallbackService", () => {
           throw new Error("failed");
         }),
       ).rejects.toThrow("All models in fallback chain failed");
-    });
-  });
-});
-
-// ============================================================================
-// PolicyEngine Tests
-// ============================================================================
-
-describe("PolicyEngine", () => {
-  const engine = createPolicyEngine();
-
-  describe("basic interface", () => {
-    it("should exist and have the expected interface", () => {
-      expect(engine).toBeDefined();
-      expect(typeof engine.scoreModels).toBe("function");
-      expect(typeof engine.selectBest).toBe("function");
-    });
-  });
-
-  describe("selectBest", () => {
-    it("selectBest should throw on empty candidates", () => {
-      expect(() => engine.selectBest([])).toThrow("No candidates available");
-    });
-
-    it("should select the only candidate", () => {
-      const candidates: RouteCandidate[] = [
-        { model_id: "model-a", score: 1.0, reason: "test" },
-      ];
-      const result = engine.selectBest(candidates);
-      expect(result.model_id).toBe("model-a");
-    });
-
-    it("should select highest scored candidate", () => {
-      const candidates: RouteCandidate[] = [
-        { model_id: "model-a", score: 0.5, reason: "test" },
-        { model_id: "model-b", score: 0.9, reason: "test" },
-        { model_id: "model-c", score: 0.7, reason: "test" },
-      ];
-      const result = engine.selectBest(candidates);
-      expect(result.model_id).toBe("model-a");
-    });
-  });
-
-  describe("scoreModels (not implemented)", () => {
-    it("should throw not implemented error", () => {
-      const context: RoutingContext = {
-        requested_model: "gpt-4",
-        routing_mode: "auto",
-        available_models: ["model-a", "model-b"],
-      };
-
-      expect(() => engine.scoreModels(context)).toThrow("Not implemented");
     });
   });
 });

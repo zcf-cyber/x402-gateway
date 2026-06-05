@@ -1,10 +1,9 @@
-import type { RoutingMode, TokenUsage } from '../types.js';
+import type { TokenUsage } from '../types.js';
 
 /** Full request trace for audit persistence */
 export interface RequestTrace {
   request_id: string;
   request_hash: string;
-  routing_mode: RoutingMode;
   status: 'pending' | 'completed' | 'failed';
   created_at: string;
   completed_at?: string;
@@ -15,7 +14,6 @@ export interface RequestTrace {
 export interface AuditQueryResult {
   request_id: string;
   request_hash: string;
-  routing_mode: RoutingMode;
   route_decision: {
     selected_model: string;
     fallback_chain: string[];
