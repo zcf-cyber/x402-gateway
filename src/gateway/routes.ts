@@ -109,14 +109,12 @@ export function registerRoutes(
       await services.traceService.startTrace(
         requestId,
         challengePayload.request_hash,
-        body.routing_mode || "manual",
       );
 
       try {
         // Route the request to upstream provider
         const { decision, response } = await services.routerService.route(
           body,
-          body.routing_mode || "manual",
         );
 
         // Record token usage
@@ -179,7 +177,6 @@ export function registerRoutes(
             request_id: requestId,
             quote_id: challengePayload.quote_id,
             payer_address: paymentProof.payer_address,
-            routing_mode: body.routing_mode || "manual",
             model_used: decision.selected_model,
             unit_price_input_usd: cost.unit_price_input,
             unit_price_output_usd: cost.unit_price_output,

@@ -7,8 +7,9 @@
 export type RequestId = string & { readonly __brand: 'RequestId' };
 export type QuoteId = string & { readonly __brand: 'QuoteId' };
 
-/** Routing mode: client picks a specific model or lets the platform choose */
-export type RoutingMode = 'manual' | 'auto';
+// RoutingMode ('manual' | 'auto') removed — auto model selection conflicts
+// with x402 payment contract (Issue #71). Only manual routing is supported.
+// TODO(Issue #80): multi-provider fallback for same model.
 
 // ---------------------------------------------------------------------------
 // Chat Completion (OpenAI-compatible)
@@ -24,7 +25,6 @@ export interface ChatCompletionRequest {
   messages: ChatMessage[];
   temperature?: number;
   stream?: boolean;
-  routing_mode?: RoutingMode;
 }
 
 export interface ChatCompletionChoice {
@@ -43,7 +43,6 @@ export interface UsageReceipt {
   request_id: string;
   quote_id: string;
   payer_address: string;
-  routing_mode: RoutingMode;
   model_used: string;
   unit_price_input_usd: string;
   unit_price_output_usd: string;
@@ -110,7 +109,6 @@ export interface AuditPayment {
 export interface AuditRecord {
   request_id: string;
   request_hash: string;
-  routing_mode: RoutingMode;
   route_decision: AuditRouteDecision;
   usage: TokenUsage;
   cost: AuditCost;

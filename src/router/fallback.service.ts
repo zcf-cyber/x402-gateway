@@ -2,6 +2,20 @@ import { UpstreamUnavailableError, UpstreamTimeoutError } from "../errors.js";
 import type { UpstreamResponse } from "../provider/types.js";
 
 /**
+ * TODO(Issue #80): 高可用 Provider Fallback — Multi-Provider Retry for the Same Model
+ *
+ * 当前: executeWithFallback 接收 modelIds[]，用于不同模型间的 fallback。
+ * 下一阶段需改为: 同一模型的多个 provider 间 fallback（如 openai → azure → aws）。
+ * 用户付费金额不变（因为 model 不变 → pricing 不变），符合 x402 契约。
+ *
+ * 改动要点:
+ * 1. 接收 ProviderEndpoint[] 而非 modelIds[]
+ * 2. 同一 modelId + 多个 provider adapter 按优先级重试
+ * 3. 成功的 provider 动态 rebase 到最高优先级 (Issue #80)
+ * 4. 审计记录: fallback_chain 记录实际尝试的 provider 列表
+ */
+
+/**
  * Dependencies for FallbackService
  */
 export interface FallbackServiceDeps {

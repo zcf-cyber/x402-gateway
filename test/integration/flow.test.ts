@@ -82,7 +82,6 @@ describe("End-to-End Integration Flow", () => {
         challengeBody.payment_requirements.quote_id,
       );
       expect(body.usage_receipt.payer_address).toBe(paymentProof.payer_address);
-      expect(body.usage_receipt.routing_mode).toBe("manual");
       expect(body.usage_receipt.model_used).toBe("openai/gpt-4o");
       expect(body.usage_receipt.total_cost_usd).toBeDefined();
       expect(body.usage_receipt.route_proof_hash).toBeDefined();
@@ -433,7 +432,7 @@ describe("End-to-End Integration Flow", () => {
     });
   });
 
-  describe("Routing Failures and Fallback", () => {
+  describe("Routing Failures", () => {
     it("should handle routing failure gracefully", async () => {
       const { app } = buildMockedTestApp({
         routerShouldFail: true,
@@ -469,47 +468,6 @@ describe("End-to-End Integration Flow", () => {
 
       // Should fail with 500 internal error due to routing failure
       expect(response.statusCode).toBe(500);
-    });
-
-    it("should record fallback attempts in usage receipt", async () => {
-      const { app } = buildMockedTestApp({
-        routerFallbackAttempt: 1,
-      });
-
-      // Get challenge
-      const challengeResponse = await app.inject({
-        method: "POST",
-        url: "/v1/chat/completions",
-        payload: {
-          model: "openai/gpt-4o",
-          messages: [{ role: "user", content: "Hello" }],
-        },
-      });
-
-      const challengeToken =
-        challengeResponse.json().payment_requirements.challenge_token;
-      const paymentProof = createMockPaymentProof();
-      const paymentHeader = encodePaymentProof(paymentProof);
-
-      const response = await app.inject({
-        method: "POST",
-        url: "/v1/chat/completions",
-        payload: {
-          model: "openai/gpt-4o",
-          messages: [{ role: "user", content: "Hello" }],
-        },
-        headers: {
-          "x-402-challenge": challengeToken,
-          "x-402-payment": paymentHeader,
-        },
-      });
-
-      expect(response.statusCode).toBe(200);
-      const body = response.json();
-
-      // Verify receipt shows fallback information
-      expect(body.usage_receipt).toBeDefined();
-      expect(body.usage_receipt.route_proof_hash).toBeDefined();
     });
   });
 
@@ -560,7 +518,6 @@ describe("End-to-End Integration Flow", () => {
       const auditRecord = auditResponse.json();
       expect(auditRecord.request_id).toBe(requestId);
       expect(auditRecord.request_hash).toBeDefined();
-      expect(auditRecord.routing_mode).toBe("manual");
       expect(auditRecord.route_decision).toBeDefined();
       expect(auditRecord.route_decision.selected_model).toBe("openai/gpt-4o");
       expect(auditRecord.route_decision.fallback_chain).toBeDefined();
@@ -593,27 +550,6 @@ describe("End-to-End Integration Flow", () => {
       expect(response.statusCode).toBe(404);
       const body = response.json();
       expect(body.error.code).toBe("not_found");
-    });
-  });
-
-  describe("Auto Routing Mode", () => {
-    it("should support auto routing mode", async () => {
-      const { app } = buildMockedTestApp();
-
-      // Get challenge with auto routing
-      const challengeResponse = await app.inject({
-        method: "POST",
-        url: "/v1/chat/completions",
-        payload: {
-          model: "auto",
-          messages: [{ role: "user", content: "Hello" }],
-          routing_mode: "auto",
-        },
-      });
-
-      // Note: Auto mode currently throws "Auto routing mode not yet implemented"
-      // This test documents the expected behavior once auto mode is implemented
-      expect(challengeResponse.statusCode).toBe(402);
     });
   });
 

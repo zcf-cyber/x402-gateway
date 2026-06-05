@@ -72,8 +72,6 @@ export interface UsageRecordWithMetadata extends UsageRecord {
   created_at: string;
   /** Request hash for verification */
   request_hash?: string;
-  /** Routing mode used (manual or auto) */
-  routing_mode?: 'manual' | 'auto';
 }
 
 /**
