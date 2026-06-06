@@ -8,7 +8,6 @@
 import Fastify from "fastify";
 import { registerRoutes } from "../../src/gateway/routes.js";
 import { createProviderRegistry } from "../../src/provider/registry.js";
-import { createChallengeService } from "../../src/x402/challenge.service.js";
 import { createMeterService } from "../../src/billing/meter.service.js";
 import { createCostService } from "../../src/billing/cost.service.js";
 import { createPaymentService } from "../../src/billing/payment.service.js";
@@ -130,7 +129,7 @@ export function createSimulatedAdapter(
 }
 
 /**
- * Create simulated payment verification service
+ * Create simulated payment verification service (v2 compatible)
  */
 export function createSimulatedVerifyService(options?: {
   latencyMs?: { min: number; max: number };
@@ -168,6 +167,28 @@ export function createSimulatedVerifyService(options?: {
         verified: true,
         payer_address: proof.payer_address,
         amount: challenge.amount,
+      };
+    },
+
+    // v2 verification method
+    verifyPaymentV2: async (_payload: unknown) => {
+      const delay =
+        Math.floor(Math.random() * (latencyMs.max - latencyMs.min + 1)) +
+        latencyMs.min;
+      await new Promise((resolve) => setTimeout(resolve, delay));
+
+      if (Math.random() < failureRate) {
+        throw new PaymentVerificationFailedError(
+          "Simulated verification failure",
+        );
+      }
+
+      if (Math.random() < insufficientPaymentRate) {
+        throw new InsufficientPaymentError("0.001", "0.0001");
+      }
+
+      return {
+        payer: "0x1234567890123456789012345678901234567890" as `0x${string}`,
       };
     },
   };
@@ -259,6 +280,19 @@ export function createSimulatedRouterService(
   };
 }
 
+/** Simulated settle service for load testing. */
+function createSimulatedSettleService() {
+  return {
+    settlePayment: async () => ({
+      success: true,
+      payer: "0x1234567890123456789012345678901234567890",
+      transaction: "0x" + "a".repeat(64),
+      network: "eip155:8453",
+      amount: "1000000",
+    }),
+  };
+}
+
 /**
  * Build a fully simulated test environment for load testing
  */
@@ -299,14 +333,11 @@ export function buildSimulationEnvironment(
 
   const services: ServiceContainer = {
     providerRegistry,
-    challengeService: createChallengeService({
-      challengeSecret: "sim-secret-at-least-32-chars-long-for-simulations",
-      challengeTtlSeconds: 300,
-      merchantAddress: "0x0000000000000000000000000000000000000001",
-    }),
     verifyService: createSimulatedVerifyService({
       latencyMs: config.verificationLatencyMs,
-    }),
+    }) as ServiceContainer["verifyService"],
+    settleService:
+      createSimulatedSettleService() as ServiceContainer["settleService"],
     replayService: createSimulatedReplayService(),
     routerService: createSimulatedRouterService(config.providers),
     meterService: createMeterService({ recordUsage: async () => {} }),
@@ -317,6 +348,19 @@ export function buildSimulationEnvironment(
     traceService,
     receiptService: createReceiptService({ traceService, ledgerService }),
     paymentChain: "base",
+    merchantAddress: "0x0000000000000000000000000000000000000001",
+    challengeTtlSeconds: 300,
+    paymentChainConfig: {
+      chain: {
+        id: 8453,
+        name: "Base",
+        nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+        rpcUrls: { default: { http: [] } },
+      } as import("viem").Chain,
+      rpcUrl: "https://mainnet.base.org",
+      tokenAddress:
+        "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" as `0x${string}`,
+    },
   };
 
   // Wrap router to track metrics

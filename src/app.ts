@@ -1,3 +1,4 @@
+import type { Address, Chain } from "viem";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
@@ -50,13 +51,13 @@ import {
   OpenAIAdapter,
 } from "./provider/index.js";
 import {
-  createChallengeService,
-  type IChallengeService,
-} from "./x402/challenge.service.js";
-import {
   createPaymentVerifyService,
   type IPaymentVerifyService,
 } from "./x402/verify/index.js";
+import {
+  createExactSettleService,
+  type IExactSettleService,
+} from "./x402/schemes/exact/settle.service.js";
 import {
   getSupportedChains,
   buildAlchemyRpcUrls,
@@ -99,10 +100,17 @@ import {
   type IReceiptService,
 } from "./audit/receipt.service.js";
 
+/** Per-chain config needed by settlement service. */
+export interface ChainSettleConfig {
+  chain: Chain;
+  rpcUrl: string;
+  tokenAddress: Address;
+}
+
 export interface ServiceContainer {
   providerRegistry: IProviderRegistry;
-  challengeService: IChallengeService;
   verifyService: IPaymentVerifyService;
+  settleService: IExactSettleService;
   replayService: IReplayProtectionService;
   routerService: IRouterService;
   meterService: IMeterService;
@@ -116,6 +124,12 @@ export interface ServiceContainer {
   platformFeeBps: number;
   /** Default payment chain from PAYMENT_CHAIN env var. Falls back to "base" if unset. */
   paymentChain: string;
+  /** Gateway's merchant/facilitator address for receiving payments. */
+  merchantAddress: string;
+  /** Challenge TTL in seconds (how long a 402 offer is valid). */
+  challengeTtlSeconds: number;
+  /** Per-chain config for the active payment chain (used by settlement service). */
+  paymentChainConfig: ChainSettleConfig;
 }
 
 function buildChainRegistry(config: Config): IChainRegistry {
@@ -145,6 +159,36 @@ function buildChainRegistry(config: Config): IChainRegistry {
   }
 
   return registry;
+}
+
+/**
+ * Build ChainSettleConfig for the primary payment chain.
+ * Falls back to "base" if PAYMENT_CHAIN is not set or the configured chain
+ * has no RPC.
+ */
+function buildPaymentChainConfig(
+  chainName: string,
+  chainRegistry: IChainRegistry,
+): ChainSettleConfig {
+  const registered = chainRegistry.get(chainName);
+  if (!registered) {
+    // Fall back to first registered chain
+    const fallbackName = chainRegistry.list()[0];
+    if (!fallbackName) {
+      throw new Error("No payment chains registered for settlement");
+    }
+    const fb = chainRegistry.get(fallbackName)!;
+    return {
+      chain: fb.chain,
+      rpcUrl: fb.rpcUrl,
+      tokenAddress: fb.usdcAddress,
+    };
+  }
+  return {
+    chain: registered.chain,
+    rpcUrl: registered.rpcUrl,
+    tokenAddress: registered.usdcAddress,
+  };
 }
 
 export async function buildApp(config: Config) {
@@ -183,14 +227,6 @@ export async function buildApp(config: Config) {
 
   // ============================================================
   // Model Registration: MVP Open Model Catalog
-  //
-  // All models use OpenAI-compatible protocol via OpenAIAdapter.
-  // Each model is conditionally registered when its API key is
-  // configured (via environment variables). Unconfigured models
-  // are silently skipped and will not appear in GET /v1/models.
-  //
-  // Pricing is per-token USD, sourced from official provider
-  // pricing pages (last updated: 2026-04).
   // ============================================================
 
   // --- OpenAI GPT-4o ---
@@ -238,7 +274,6 @@ export async function buildApp(config: Config) {
   }
 
   // --- Kimi K2.6 (Moonshot AI) ---
-  // models.dev provider: moonshot, model: kimi-k2.6
   if (config.moonshotApiKey) {
     const moonshotBaseUrl =
       config.moonshotBaseUrl || "https://api.moonshot.cn/v1";
@@ -254,7 +289,6 @@ export async function buildApp(config: Config) {
   }
 
   // --- GLM 5.1 (智谱 AI) ---
-  // models.dev provider: zhipu, model: glm-5.1
   if (config.zhipuApiKey) {
     const zhipuBaseUrl =
       config.zhipuBaseUrl || "https://open.bigmodel.cn/api/paas/v4";
@@ -270,7 +304,6 @@ export async function buildApp(config: Config) {
   }
 
   // --- DeepSeek V4 Pro (budget tier, flagship) ---
-  // models.dev provider: deepseek, model: deepseek-v4-pro
   if (config.deepseekApiKey) {
     const deepseekBaseUrl =
       config.deepseekBaseUrl || "https://api.deepseek.com/v1";
@@ -286,7 +319,6 @@ export async function buildApp(config: Config) {
   }
 
   // --- DeepSeek V4 Flash (budget tier, fastest/cheapest) ---
-  // models.dev provider: deepseek, model: deepseek-v4-flash
   if (config.deepseekApiKey) {
     const deepseekBaseUrl =
       config.deepseekBaseUrl || "https://api.deepseek.com/v1";
@@ -334,25 +366,22 @@ export async function buildApp(config: Config) {
     type: "erc20",
   });
 
-  // Register Solana assets (not covered by EVM chain config)
-  tokenRegistry.register("solana", "USDC", {
-    symbol: "USDC",
-    decimals: 6,
-    address: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" as `0x${string}`,
-    type: "erc20",
-  });
+  const paymentChainName = config.paymentChain ?? "base";
+  const paymentChainConfig = buildPaymentChainConfig(
+    paymentChainName,
+    chainRegistry,
+  );
 
   const services: ServiceContainer = {
     providerRegistry,
-    challengeService: createChallengeService({
-      challengeSecret: config.challengeSecret,
-      challengeTtlSeconds: config.challengeTtlSeconds,
-      merchantAddress: config.merchantAddress,
-    }),
     verifyService: createPaymentVerifyService({
       chainRegistry,
-      solanaRpcUrl: config.solanaRpcUrl,
       tokenRegistry,
+      solanaRpcUrl: config.solanaRpcUrl,
+      merchantAddress: config.merchantAddress,
+    }),
+    settleService: createExactSettleService({
+      facilitatorPrivateKey: config.challengeSecret, // Reuse challengeSecret as facilitator key for MVP
     }),
     replayService: createReplayProtectionService(new InMemoryRedis()),
     routerService: createRouterService({ providerRegistry }),
@@ -382,7 +411,10 @@ export async function buildApp(config: Config) {
     ledgerService,
     traceService,
     receiptService: createReceiptService({ traceService, ledgerService }),
-    paymentChain: config.paymentChain ?? "base",
+    paymentChain: paymentChainName,
+    merchantAddress: config.merchantAddress,
+    challengeTtlSeconds: config.challengeTtlSeconds,
+    paymentChainConfig,
   };
 
   registerRoutes(app, services);

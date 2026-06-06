@@ -2,7 +2,6 @@ import Fastify from "fastify";
 import { registerRoutes } from "../src/gateway/routes.js";
 import { createProviderRegistry } from "../src/provider/registry.js";
 import { OpenAIAdapter } from "../src/provider/openai.adapter.js";
-import { createChallengeService } from "../src/x402/challenge.service.js";
 import {
   createPaymentVerifyService,
   type IPaymentVerifyService,
@@ -71,6 +70,7 @@ export function createMockReplayService(): IReplayProtectionService {
 
 /**
  * Create a mock payment verification service for testing.
+ * Supports both legacy verifyPayment and v2 verifyPaymentV2.
  */
 export function createMockVerifyService(options?: {
   shouldFail?: boolean;
@@ -91,6 +91,17 @@ export function createMockVerifyService(options?: {
         verified: true,
         payer_address: "0x1234567890123456789012345678901234567890",
         amount: challenge.amount,
+      };
+    },
+    verifyPaymentV2: async (_payload) => {
+      if (options?.failWithInsufficientPayment) {
+        throw new InsufficientPaymentError("0.001", "0.0001");
+      }
+      if (options?.shouldFail) {
+        throw new PaymentVerificationFailedError("Payment verification failed");
+      }
+      return {
+        payer: "0x1234567890123456789012345678901234567890" as `0x${string}`,
       };
     },
   };
@@ -145,8 +156,33 @@ export function createMockRouterService(options?: {
 }
 
 /**
- * Build a test Fastify instance with stub services.
+ * Create a mock settle service for testing.
+ */
+export function createMockSettleService() {
+  return {
+    settlePayment: async (
+      _paymentPayload: unknown,
+      _chain: unknown,
+      _rpcUrl: string,
+      _tokenAddress: unknown,
+    ) => {
+      return {
+        success: true,
+        payer: "0x1234567890123456789012345678901234567890",
+        transaction:
+          "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+        network: "eip155:8453",
+        amount: "1000000",
+      };
+    },
+  };
+}
+
+/**
+ * Build a test Fastify instance with real services.
  * Services can be overridden via the `overrides` parameter.
+ * NOTE: This uses the real verify service which requires chain config.
+ * For most tests, prefer `buildMockedTestApp()`.
  */
 export function buildTestApp(overrides: Partial<ServiceContainer> = {}) {
   const app = Fastify({ logger: false });
@@ -163,40 +199,33 @@ export function buildTestApp(overrides: Partial<ServiceContainer> = {}) {
   const costService = createCostService();
   const ledgerService = createLedgerService();
   const traceService = createTraceService();
+  const chainRegistry = createChainRegistry();
+  chainRegistry.register("base", {
+    chain: {
+      id: 8453,
+      name: "Base",
+      nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+      rpcUrls: { default: { http: [] } },
+    } as import("viem").Chain,
+    usdcAddress: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    rpcUrl: "https://sepolia.base.org",
+  });
+  const tokenRegistry = createTokenRegistry();
+  tokenRegistry.register("base", "USDC", {
+    symbol: "USDC",
+    decimals: 6,
+    address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    type: "erc20",
+  });
 
   const services: ServiceContainer = {
     providerRegistry,
-    challengeService: createChallengeService({
-      challengeSecret: "test-secret-at-least-32-chars-long-for-testing",
-      challengeTtlSeconds: 300,
+    verifyService: createPaymentVerifyService({
+      chainRegistry,
+      tokenRegistry,
       merchantAddress: "0x0000000000000000000000000000000000000001",
     }),
-    verifyService: createPaymentVerifyService({
-      chainRegistry: (() => {
-        const registry = createChainRegistry();
-        registry.register("base", {
-          chain: {
-            id: 8453,
-            name: "Base",
-            nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-            rpcUrls: { default: { http: [] } },
-          } as import("viem").Chain,
-          usdcAddress: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-          rpcUrl: "https://sepolia.base.org",
-        });
-        return registry;
-      })(),
-      tokenRegistry: (() => {
-        const registry = createTokenRegistry();
-        registry.register("base", "USDC", {
-          symbol: "USDC",
-          decimals: 6,
-          address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-          type: "erc20",
-        });
-        return registry;
-      })(),
-    }),
+    settleService: createMockSettleService() as ServiceContainer["settleService"],
     replayService: createReplayProtectionService(null as never),
     routerService: createRouterService({ providerRegistry }),
     meterService: createMeterService({
@@ -209,6 +238,18 @@ export function buildTestApp(overrides: Partial<ServiceContainer> = {}) {
     traceService,
     receiptService: createReceiptService({ traceService, ledgerService }),
     paymentChain: "base",
+    merchantAddress: "0x0000000000000000000000000000000000000001",
+    challengeTtlSeconds: 300,
+    paymentChainConfig: {
+      chain: {
+        id: 8453,
+        name: "Base",
+        nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+        rpcUrls: { default: { http: [] } },
+      } as import("viem").Chain,
+      rpcUrl: "https://sepolia.base.org",
+      tokenAddress: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" as `0x${string}`,
+    },
     ...overrides,
   };
 
@@ -256,12 +297,9 @@ export function buildMockedTestApp(options?: {
 
   const services: ServiceContainer = {
     providerRegistry,
-    challengeService: createChallengeService({
-      challengeSecret: "test-secret-at-least-32-chars-long-for-testing",
-      challengeTtlSeconds: 300,
-      merchantAddress: "0x0000000000000000000000000000000000000001",
-    }),
     verifyService,
+    settleService:
+      createMockSettleService() as ServiceContainer["settleService"],
     replayService,
     routerService,
     meterService,
@@ -272,6 +310,19 @@ export function buildMockedTestApp(options?: {
     traceService,
     receiptService: createReceiptService({ traceService, ledgerService }),
     paymentChain: "base",
+    merchantAddress: "0x0000000000000000000000000000000000000001",
+    challengeTtlSeconds: 300,
+    paymentChainConfig: {
+      chain: {
+        id: 8453,
+        name: "Base",
+        nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+        rpcUrls: { default: { http: [] } },
+      } as import("viem").Chain,
+      rpcUrl: "https://mainnet.base.org",
+      tokenAddress:
+        "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" as `0x${string}`,
+    },
   };
 
   const app = Fastify({ logger: false });
@@ -296,7 +347,51 @@ export function createMockPaymentProof(
 
 /**
  * Encode payment proof to base64url format (as used in X-402-Payment header).
+ *
+ * @deprecated Use the x402 v2 transport encode functions for new flows.
  */
 export function encodePaymentProof(proof: PaymentProof): string {
   return Buffer.from(JSON.stringify(proof)).toString("base64url");
+}
+
+/**
+ * Create a mock x402 v2 PAYMENT-SIGNATURE header value for testing.
+ */
+export function createPaymentSignatureHeader(overrides?: {
+  amount?: string;
+  payTo?: string;
+}): string {
+  const payload = {
+    x402Version: 2,
+    accepted: {
+      scheme: "exact",
+      network: "eip155:8453",
+      asset: "USDC",
+      amount: overrides?.amount ?? "0.001",
+      payTo:
+        overrides?.payTo ??
+        "0x0000000000000000000000000000000000000001",
+      maxTimeoutSeconds: 300,
+      extra: {
+        quote_id: "test-quote-123",
+        request_hash: "rh_test_hash_abc",
+      },
+    },
+    payload: {
+      signature:
+        "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1b",
+      authorization: {
+        from: "0x1234567890123456789012345678901234567890",
+        to: overrides?.payTo ??
+          "0x0000000000000000000000000000000000000001",
+        value: "1000000",
+        validAfter: "0",
+        validBefore: "9999999999",
+        nonce:
+          "0x0000000000000000000000000000000000000000000000000000000000000001",
+      },
+    },
+  };
+
+  return Buffer.from(JSON.stringify(payload)).toString("base64url");
 }

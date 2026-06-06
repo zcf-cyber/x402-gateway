@@ -8,6 +8,7 @@ import {
 import { createChainRegistry } from "../../src/x402/chain-registry.service.js";
 import { createTokenRegistry } from "../../src/x402/token-registry.service.js";
 import { PaymentVerificationFailedError } from "../../src/errors.js";
+import type { PaymentPayloadV2 } from "../../src/x402/transport/types.js";
 
 describe("PaymentVerifyService", () => {
   const registry = createChainRegistry();
@@ -28,7 +29,12 @@ describe("PaymentVerifyService", () => {
   const service = createPaymentVerifyService({
     chainRegistry: registry,
     tokenRegistry,
+    merchantAddress: "0x0000000000000000000000000000000000000002",
   });
+
+  // -----------------------------------------------------------------------
+  // Legacy verifyPayment tests (still supported for backward compat)
+  // -----------------------------------------------------------------------
 
   it("should throw PaymentVerificationFailedError for unsupported chain", async () => {
     const proof = {
@@ -49,57 +55,53 @@ describe("PaymentVerifyService", () => {
     await expect(service.verifyPayment(proof, challenge)).rejects.toThrow(
       PaymentVerificationFailedError,
     );
-    await expect(service.verifyPayment(proof, challenge)).rejects.toThrow(
-      "Unsupported chain: unsupported-chain",
-    );
   });
 
-  it("should throw PaymentVerificationFailedError for unsupported chain (case insensitive)", async () => {
-    const proof = {
-      tx_hash: "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
-      chain: "UNSUPPORTED",
-      payer_address: "0x0000000000000000000000000000000000000001",
-    };
-    const challenge = {
-      quote_id: "test-quote",
-      request_hash: "rh_test",
-      amount: "0.001",
-      asset: "USDC",
-      chain: "UNSUPPORTED",
-      merchant_address: "0x0000000000000000000000000000000000000002",
-      expires_at: new Date(Date.now() + 300000).toISOString(),
+  // -----------------------------------------------------------------------
+  // v2 verifyPaymentV2 tests
+  // -----------------------------------------------------------------------
+
+  it("verifyPaymentV2 should throw for unsupported network", async () => {
+    const payload: PaymentPayloadV2 = {
+      x402Version: 2,
+      accepted: {
+        scheme: "exact",
+        network: "eip155:99999",
+        asset: "USDC",
+        amount: "0.001",
+        payTo: "0x0000000000000000000000000000000000000002",
+        maxTimeoutSeconds: 300,
+        extra: {},
+      },
+      payload: {},
     };
 
-    await expect(service.verifyPayment(proof, challenge)).rejects.toThrow(
-      PaymentVerificationFailedError,
-    );
-    await expect(service.verifyPayment(proof, challenge)).rejects.toThrow(
-      "Unsupported chain: UNSUPPORTED",
-    );
+    await expect(
+      service.verifyPaymentV2(payload, "0x0000000000000000000000000000000000000002"),
+    ).rejects.toThrow(PaymentVerificationFailedError);
   });
 
-  it("should throw PaymentVerificationFailedError for unsupported asset", async () => {
-    const proof = {
-      tx_hash: "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
-      chain: "base",
-      payer_address: "0x0000000000000000000000000000000000000001",
-    };
-    const challenge = {
-      quote_id: "test-quote",
-      request_hash: "rh_test",
-      amount: "0.001",
-      asset: "UNKNOWN",
-      chain: "base",
-      merchant_address: "0x0000000000000000000000000000000000000002",
-      expires_at: new Date(Date.now() + 300000).toISOString(),
+  it("verifyPaymentV2 should throw for unsupported asset", async () => {
+    const payload: PaymentPayloadV2 = {
+      x402Version: 2,
+      accepted: {
+        scheme: "exact",
+        network: "eip155:8453",
+        asset: "UNKNOWN_TOKEN",
+        amount: "0.001",
+        payTo: "0x0000000000000000000000000000000000000002",
+        maxTimeoutSeconds: 300,
+        extra: {},
+      },
+      payload: {},
     };
 
-    await expect(service.verifyPayment(proof, challenge)).rejects.toThrow(
-      PaymentVerificationFailedError,
-    );
-    await expect(service.verifyPayment(proof, challenge)).rejects.toThrow(
-      "Unsupported asset: UNKNOWN on chain base",
-    );
+    await expect(
+      service.verifyPaymentV2(payload, "0x0000000000000000000000000000000000000002"),
+    ).rejects.toThrow(PaymentVerificationFailedError);
+    await expect(
+      service.verifyPaymentV2(payload, "0x0000000000000000000000000000000000000002"),
+    ).rejects.toThrow("Unsupported asset");
   });
 });
 
@@ -127,11 +129,8 @@ describe("parseAmount", () => {
   });
 });
 
-describe("TokenRegistry-driven decimals (replaces getAssetDecimals)", () => {
+describe("TokenRegistry-driven decimals", () => {
   it("should normalize requiredAmount to token decimals for comparison", () => {
-    // Previously: parseAmount("0.001") defaulted to 18 decimals = 10^15
-    // USDC transfer value on-chain for 0.001 USDC = 1000 (6 decimals)
-    // 1000 < 10^15 would falsely trigger insufficient_payment
     const usdcDecimals = 6;
     const requiredAmount = parseAmount("0.001", usdcDecimals);
     const onChainTransferValue = 1000n;

@@ -17,6 +17,34 @@ import {
 } from "./environment.js";
 import type { PaymentProof } from "../../src/x402/types.js";
 
+/** Create a test PAYMENT-SIGNATURE header value for simulation tests. */
+function createTestPaymentSignature(): string {
+  const payload = {
+    x402Version: 2,
+    accepted: {
+      scheme: "exact",
+      network: "eip155:8453",
+      asset: "USDC",
+      amount: "0.05",
+      payTo: "0x0000000000000000000000000000000000000001",
+      maxTimeoutSeconds: 300,
+      extra: { quote_id: "sim-quote", request_hash: "rh_sim" },
+    },
+    payload: {
+      signature: "0x" + "a".repeat(130) + "1b",
+      authorization: {
+        from: "0x1234567890123456789012345678901234567890",
+        to: "0x0000000000000000000000000000000000000001",
+        value: "1000000",
+        validAfter: "0",
+        validBefore: "9999999999",
+        nonce: "0x0000000000000000000000000000000000000000000000000000000000000001",
+      },
+    },
+  };
+  return Buffer.from(JSON.stringify(payload)).toString("base64url");
+}
+
 describe("Simulation Environment", () => {
   describe("Simulated Adapter", () => {
     it("should simulate provider latency", async () => {
@@ -43,7 +71,7 @@ describe("Simulation Environment", () => {
 
       expect(response).toBeDefined();
       expect(response.model_used).toContain("test-provider");
-      expect(elapsed).toBeGreaterThanOrEqual(45); // Allow small variance
+      expect(elapsed).toBeGreaterThanOrEqual(45);
       expect(response.usage.prompt_tokens).toBeGreaterThan(0);
       expect(response.usage.completion_tokens).toBeGreaterThan(0);
     });
@@ -53,7 +81,7 @@ describe("Simulation Environment", () => {
         name: "unstable-provider",
         models: ["test-model"],
         latencyMs: { min: 10, max: 20 },
-        failureRate: 1.0, // Always fail
+        failureRate: 1.0,
         rateLimitRPS: 1000,
       };
 
@@ -85,13 +113,12 @@ describe("Simulation Environment", () => {
         {
           model: "test-model",
           messages: [
-            { role: "user", content: "a".repeat(100) }, // 100 chars
+            { role: "user", content: "a".repeat(100) },
           ],
         },
         "test-model",
       );
 
-      // Token count should be roughly content.length / 4
       expect(response.usage.prompt_tokens).toBeGreaterThan(20);
       expect(response.usage.prompt_tokens).toBeLessThan(30);
     });
@@ -122,7 +149,7 @@ describe("Simulation Environment", () => {
     it("should fail verification based on failure rate", async () => {
       const service = createSimulatedVerifyService({
         latencyMs: { min: 10, max: 20 },
-        failureRate: 1.0, // Always fail
+        failureRate: 1.0,
       });
 
       const proof: PaymentProof = {
@@ -142,10 +169,7 @@ describe("Simulation Environment", () => {
       const service = createSimulatedReplayService();
       const hash = "test-hash-123";
 
-      // First check should pass
       await expect(service.checkAndMark(hash, 60)).resolves.toBe(true);
-
-      // Second check should fail with replay error
       await expect(service.checkAndMark(hash, 60)).rejects.toThrow();
     });
 
@@ -154,13 +178,8 @@ describe("Simulation Environment", () => {
       const key = "idem-key-123";
       const response = { id: "test-123", status: "success" };
 
-      // Check should return null initially
       expect(await service.checkIdempotency(key)).toBeNull();
-
-      // Save idempotency
       await service.saveIdempotency(key, response, 60);
-
-      // Check should return saved response
       expect(await service.checkIdempotency(key)).toEqual(response);
     });
   });
@@ -177,17 +196,12 @@ describe("Simulation Environment", () => {
         },
       ];
 
-      const router = createSimulatedRouterService(providers, {
-        mode: "manual",
-      });
+      const router = createSimulatedRouterService(providers);
 
-      const result = await router.route(
-        {
-          model: "openai/gpt-4o",
-          messages: [{ role: "user", content: "Hello" }],
-        },
-        "manual",
-      );
+      const result = await router.route({
+        model: "openai/gpt-4o",
+        messages: [{ role: "user", content: "Hello" }],
+      });
 
       expect(result.decision.selected_model).toBe("openai/gpt-4o");
       expect(result.response.model_used).toContain("openai");
@@ -204,18 +218,13 @@ describe("Simulation Environment", () => {
         },
       ];
 
-      const router = createSimulatedRouterService(providers, {
-        mode: "manual",
-      });
+      const router = createSimulatedRouterService(providers);
 
       await expect(
-        router.route(
-          {
-            model: "unknown/model",
-            messages: [{ role: "user", content: "Hello" }],
-          },
-          "manual",
-        ),
+        router.route({
+          model: "unknown/model",
+          messages: [{ role: "user", content: "Hello" }],
+        }),
       ).rejects.toThrow("Provider unknown not found");
     });
   });
@@ -235,8 +244,8 @@ describe("Simulation Environment", () => {
       env.metrics.reset();
     });
 
-    it("should complete full 402 flow in simulation", async () => {
-      // Step 1: Get challenge
+    it("should complete full v2 flow in simulation", async () => {
+      // Step 1: Get 402 with PAYMENT-REQUIRED header
       const challengeResponse = await env.app.inject({
         method: "POST",
         url: "/v1/chat/completions",
@@ -248,17 +257,11 @@ describe("Simulation Environment", () => {
 
       expect(challengeResponse.statusCode).toBe(402);
       const challengeBody = challengeResponse.json();
-      const challengeToken = challengeBody.payment_requirements.challenge_token;
+      expect(challengeBody.payment_requirements).toBeDefined();
+      expect(challengeBody.payment_requirements.quote_id).toBeDefined();
 
-      // Step 2: Submit payment
-      const paymentProof: PaymentProof = {
-        tx_hash: "0x" + "a".repeat(64),
-        chain: "base",
-        payer_address: "0x1234567890123456789012345678901234567890",
-      };
-      const paymentHeader = Buffer.from(JSON.stringify(paymentProof)).toString(
-        "base64url",
-      );
+      // Step 2: Submit payment with v2 PAYMENT-SIGNATURE header
+      const paymentSignature = createTestPaymentSignature();
 
       const successResponse = await env.app.inject({
         method: "POST",
@@ -268,8 +271,7 @@ describe("Simulation Environment", () => {
           messages: [{ role: "user", content: "Hello" }],
         },
         headers: {
-          "x-402-challenge": challengeToken,
-          "x-402-payment": paymentHeader,
+          "payment-signature": paymentSignature,
         },
       });
 
@@ -280,13 +282,7 @@ describe("Simulation Environment", () => {
     });
 
     it("should track metrics correctly", async () => {
-      const paymentProof: PaymentProof = {
-        tx_hash: "0x" + "b".repeat(64),
-        chain: "base",
-        payer_address: "0x1234567890123456789012345678901234567890",
-      };
-
-      // Get challenge
+      // Get 402
       const challengeResponse = await env.app.inject({
         method: "POST",
         url: "/v1/chat/completions",
@@ -296,13 +292,11 @@ describe("Simulation Environment", () => {
         },
       });
 
-      const challengeToken =
-        challengeResponse.json().payment_requirements.challenge_token;
-      const paymentHeader = Buffer.from(JSON.stringify(paymentProof)).toString(
-        "base64url",
-      );
+      expect(challengeResponse.statusCode).toBe(402);
 
-      // Submit request
+      const paymentSignature = createTestPaymentSignature();
+
+      // Submit request with v2 header
       await env.app.inject({
         method: "POST",
         url: "/v1/chat/completions",
@@ -311,8 +305,7 @@ describe("Simulation Environment", () => {
           messages: [{ role: "user", content: "Test" }],
         },
         headers: {
-          "x-402-challenge": challengeToken,
-          "x-402-payment": paymentHeader,
+          "payment-signature": paymentSignature,
         },
       });
 
@@ -350,11 +343,7 @@ describe("Simulation Environment", () => {
 
       expect(challengeResponse.statusCode).toBe(402);
 
-      const paymentProof: PaymentProof = {
-        tx_hash: "0x" + "c".repeat(64),
-        chain: "base",
-        payer_address: "0x1234567890123456789012345678901234567890",
-      };
+      const paymentSignature = createTestPaymentSignature();
 
       const successResponse = await env.app.inject({
         method: "POST",
@@ -364,11 +353,7 @@ describe("Simulation Environment", () => {
           messages: [{ role: "user", content: "Hello" }],
         },
         headers: {
-          "x-402-challenge":
-            challengeResponse.json().payment_requirements.challenge_token,
-          "x-402-payment": Buffer.from(JSON.stringify(paymentProof)).toString(
-            "base64url",
-          ),
+          "payment-signature": paymentSignature,
         },
       });
 
