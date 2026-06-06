@@ -14,6 +14,7 @@ import { createReceiptService } from "../../src/audit/receipt.service.js";
 import { createSchemeRegistry } from "../../src/x402/schemes/registry.js";
 import { createExactScheme } from "../../src/x402/schemes/exact/index.js";
 import { createMockOrchestrator } from "../helpers.js";
+import type { IPaymentOrchestrator } from "../../src/gateway/orchestrator.js";
 import type { ServiceContainer } from "../../src/app.js";
 import type { ChatCompletionRequest } from "../../src/types.js";
 import type { PaymentProof, VerificationResult } from "../../src/x402/types.js";
@@ -134,10 +135,6 @@ export function createSimulatedRouterService(providers: SimulatedProvider[]) {
   };
 }
 
-function createSimulatedSettleService() {
-  return { settlePayment: async () => ({ success: true, payer: "0x1234567890123456789012345678901234567890", transaction: "0x" + "a".repeat(64), network: "eip155:8453", amount: "1000000" }) };
-}
-
 export function buildSimulationEnvironment(config = DEFAULT_SIMULATION_CONFIG): {
   app: ReturnType<typeof Fastify>;
   services: ServiceContainer;
@@ -167,8 +164,7 @@ export function buildSimulationEnvironment(config = DEFAULT_SIMULATION_CONFIG): 
   const services: ServiceContainer = {
     providerRegistry,
     schemeRegistry,
-    settleService: createSimulatedSettleService() as ServiceContainer["settleService"],
-    orchestrator: createMockOrchestrator(),
+    orchestrator: createMockOrchestrator() as unknown as IPaymentOrchestrator,
     replayService: createSimulatedReplayService(),
     routerService: createSimulatedRouterService(config.providers),
     meterService: createMeterService({ recordUsage: async () => {} }),

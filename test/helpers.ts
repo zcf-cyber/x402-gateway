@@ -115,22 +115,6 @@ export function createMockRouterService(options?: {
 }
 
 // -----------------------------------------------------------------------
-// Mock Settle Service
-// -----------------------------------------------------------------------
-
-export function createMockSettleService() {
-  return {
-    settlePayment: async () => ({
-      success: true,
-      payer: "0x1234567890123456789012345678901234567890",
-      transaction: "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
-      network: "eip155:8453",
-      amount: "1000000",
-    }),
-  };
-}
-
-// -----------------------------------------------------------------------
 // Mock Payment Orchestrator
 // -----------------------------------------------------------------------
 
@@ -318,12 +302,11 @@ export function buildMockedTestApp(options?: {
   const services: ServiceContainer = {
     providerRegistry,
     schemeRegistry,
-    settleService: createMockSettleService() as ServiceContainer["settleService"],
     orchestrator: createMockOrchestrator({
       ...options,
       traceSvc: traceService,
       ledgerSvc: ledgerService,
-    }),
+    }) as unknown as IPaymentOrchestrator,
     replayService,
     routerService: createMockRouterService(options),
     meterService: createMeterService({ recordUsage: async () => {} }),
@@ -390,8 +373,7 @@ export function buildTestApp(overrides: Partial<ServiceContainer> = {}) {
   const services: ServiceContainer = {
     providerRegistry,
     schemeRegistry,
-    settleService: createMockSettleService() as ServiceContainer["settleService"],
-    orchestrator: createMockOrchestrator() as IPaymentOrchestrator,
+    orchestrator: createMockOrchestrator() as unknown as IPaymentOrchestrator,
     replayService,
     routerService: createRouterService({ providerRegistry }),
     meterService: createMeterService({ recordUsage: async () => {} }),

@@ -22,9 +22,9 @@ import type {
   SettlementResponseV2,
 } from "../x402/transport/types.js";
 import type { ISchemeRegistry } from "../x402/schemes/registry.js";
-import type { IExactSettleService } from "../x402/schemes/exact/settle.service.js";
 import type { IChainRegistry } from "../x402/chain-registry.service.js";
 import type { ITokenRegistry } from "../x402/token-registry.service.js";
+import type { SchemeSettleContext } from "../x402/schemes/types.js";
 import type { IReplayProtectionService } from "../x402/replay.service.js";
 import type { IProviderRegistry } from "../provider/index.js";
 import type { IRouterService } from "../router/router.service.js";
@@ -51,7 +51,6 @@ export interface OrchestratorDeps {
   schemeRegistry: ISchemeRegistry;
   chainRegistry: IChainRegistry;
   tokenRegistry: ITokenRegistry;
-  settleService: IExactSettleService;
   replayService: IReplayProtectionService;
   providerRegistry: IProviderRegistry;
   routerService: IRouterService;
@@ -280,13 +279,16 @@ export function createPaymentOrchestrator(
             cost,
           });
 
-          // 12. Settle on-chain
+          // 12. Settle on-chain via SchemeRegistry
           try {
-            settlementResponse = await d.settleService.settlePayment(
+            const settleCtx: SchemeSettleContext = {
+              chain: d.paymentChainConfig.chain,
+              rpcUrl: d.paymentChainConfig.rpcUrl,
+              tokenAddress: d.paymentChainConfig.tokenAddress,
+            };
+            settlementResponse = await d.schemeRegistry.settle(
               paymentPayload,
-              d.paymentChainConfig.chain,
-              d.paymentChainConfig.rpcUrl,
-              d.paymentChainConfig.tokenAddress,
+              settleCtx,
             );
           } catch {
             settlementResponse = {

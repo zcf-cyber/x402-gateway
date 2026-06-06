@@ -16,34 +16,7 @@ import {
   type SimulatedProvider,
 } from "./environment.js";
 import type { PaymentProof } from "../../src/x402/types.js";
-
-/** Create a test PAYMENT-SIGNATURE header value for simulation tests. */
-function createTestPaymentSignature(): string {
-  const payload = {
-    x402Version: 2,
-    accepted: {
-      scheme: "exact",
-      network: "eip155:8453",
-      asset: "USDC",
-      amount: "0.05",
-      payTo: "0x0000000000000000000000000000000000000001",
-      maxTimeoutSeconds: 300,
-      extra: { quote_id: "sim-quote", request_hash: "rh_sim" },
-    },
-    payload: {
-      signature: "0x" + "a".repeat(130) + "1b",
-      authorization: {
-        from: "0x1234567890123456789012345678901234567890",
-        to: "0x0000000000000000000000000000000000000001",
-        value: "1000000",
-        validAfter: "0",
-        validBefore: "9999999999",
-        nonce: "0x0000000000000000000000000000000000000000000000000000000000000001",
-      },
-    },
-  };
-  return Buffer.from(JSON.stringify(payload)).toString("base64url");
-}
+import { createPaymentSignatureHeader } from "../helpers.js";
 
 describe("Simulation Environment", () => {
   describe("Simulated Adapter", () => {
@@ -261,7 +234,7 @@ describe("Simulation Environment", () => {
       expect(challengeBody.payment_requirements.quote_id).toBeDefined();
 
       // Step 2: Submit payment with v2 PAYMENT-SIGNATURE header
-      const paymentSignature = createTestPaymentSignature();
+      const paymentSignature = createPaymentSignatureHeader({ amount: "0.05" });
 
       const successResponse = await env.app.inject({
         method: "POST",
@@ -294,7 +267,7 @@ describe("Simulation Environment", () => {
 
       expect(challengeResponse.statusCode).toBe(402);
 
-      const paymentSignature = createTestPaymentSignature();
+      const paymentSignature = createPaymentSignatureHeader({ amount: "0.05" });
 
       // Submit request — mock orchestrator returns canned 200
       const result = await env.app.inject({
@@ -343,7 +316,7 @@ describe("Simulation Environment", () => {
 
       expect(challengeResponse.statusCode).toBe(402);
 
-      const paymentSignature = createTestPaymentSignature();
+      const paymentSignature = createPaymentSignatureHeader({ amount: "0.05" });
 
       const successResponse = await env.app.inject({
         method: "POST",

@@ -28,6 +28,9 @@ import {
   createSolanaVerifyService,
   type ISolanaVerifyService,
 } from "./solana-verify.service.js";
+import {
+  createEvmVerifyService,
+} from "./evm-verify.service.js";
 import { PaymentVerificationFailedError } from "../../errors.js";
 
 // ---------------------------------------------------------------------------
@@ -91,9 +94,6 @@ export function createPaymentVerifyService(deps: {
         return solanaVerifier.verifyPayment(proof, challenge);
       }
 
-      const { createEvmVerifyService } = await import(
-        "./evm-verify.service.js"
-      );
       const evmVerifier = createEvmVerifyService(
         chainRegistry,
         tokenRegistry,

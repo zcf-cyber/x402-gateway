@@ -67,7 +67,6 @@ import {
 import { createExactScheme } from "./x402/schemes/exact/index.js";
 import {
   createExactSettleService,
-  type IExactSettleService,
 } from "./x402/schemes/exact/settle.service.js";
 import {
   getSupportedChains,
@@ -121,8 +120,7 @@ export interface ChainSettleConfig {
 export interface ServiceContainer {
   providerRegistry: IProviderRegistry;
   schemeRegistry: ISchemeRegistry;
-  settleService: IExactSettleService;
-  orchestrator: IPaymentOrchestrator;
+  readonly orchestrator: IPaymentOrchestrator;
   replayService: IReplayProtectionService;
   routerService: IRouterService;
   meterService: IMeterService;
@@ -233,10 +231,14 @@ export async function buildApp(config: Config) {
   if (config.minimaxApiKey) {
     const minimaxBaseUrl = config.minimaxBaseUrl || "https://api.minimaxi.com/v1";
     providerRegistry.register("MiniMax-M2.5", new OpenAIAdapter(config.minimaxApiKey, minimaxBaseUrl), {
-      input_usd_per_token: "0.0000005", output_usd_per_token: "0.000002", effective_at: new Date().toISOString(),
+      input_usd_per_token: "0.0000005",
+      output_usd_per_token: "0.000002",
+      effective_at: new Date().toISOString(),
     });
     providerRegistry.register("MiniMax-M2.7", new OpenAIAdapter(config.minimaxApiKey, minimaxBaseUrl), {
-      input_usd_per_token: "0.000001", output_usd_per_token: "0.000004", effective_at: new Date().toISOString(),
+      input_usd_per_token: "0.000001",
+      output_usd_per_token: "0.000004",
+      effective_at: new Date().toISOString(),
     });
   }
 
@@ -245,7 +247,9 @@ export async function buildApp(config: Config) {
       config.moonshotApiKey,
       config.moonshotBaseUrl || "https://api.moonshot.cn/v1",
     ), {
-      input_usd_per_token: "0.0000005", output_usd_per_token: "0.000002", effective_at: new Date().toISOString(),
+      input_usd_per_token: "0.0000005",
+      output_usd_per_token: "0.000002",
+      effective_at: new Date().toISOString(),
     });
   }
 
@@ -254,39 +258,57 @@ export async function buildApp(config: Config) {
       config.zhipuApiKey,
       config.zhipuBaseUrl || "https://open.bigmodel.cn/api/paas/v4",
     ), {
-      input_usd_per_token: "0.0000005", output_usd_per_token: "0.000002", effective_at: new Date().toISOString(),
+      input_usd_per_token: "0.0000005",
+      output_usd_per_token: "0.000002",
+      effective_at: new Date().toISOString(),
     });
   }
 
   if (config.deepseekApiKey) {
     const deepseekBaseUrl = config.deepseekBaseUrl || "https://api.deepseek.com/v1";
     providerRegistry.register("deepseek-v4-pro", new OpenAIAdapter(config.deepseekApiKey, deepseekBaseUrl), {
-      input_usd_per_token: "0.00000014", output_usd_per_token: "0.0000004", effective_at: new Date().toISOString(),
+      input_usd_per_token: "0.00000014",
+      output_usd_per_token: "0.0000004",
+      effective_at: new Date().toISOString(),
     });
     providerRegistry.register("deepseek-v4-flash", new OpenAIAdapter(config.deepseekApiKey, deepseekBaseUrl), {
-      input_usd_per_token: "0.00000014", output_usd_per_token: "0.00000028", effective_at: new Date().toISOString(),
+      input_usd_per_token: "0.00000014",
+      output_usd_per_token: "0.00000028",
+      effective_at: new Date().toISOString(),
     });
   }
 
   // ============================================================
   // Core Services
   // ============================================================
-  const costService = createCostService();
-  const ledgerService = createLedgerService();
-  const traceService = createTraceService();
-
   const usageStore = new Map<string, {
     request_id: string; model_id: string;
     prompt_tokens: number; completion_tokens: number; total_tokens: number;
     created_at: string;
   }>();
 
+  const costService = createCostService();
+  const ledgerService = createLedgerService();
+  const traceService = createTraceService();
+  const replaySvc = createReplayProtectionService(new InMemoryRedis());
+  const routerService = createRouterService({ providerRegistry });
+  const paymentService = createPaymentService({ costService });
+  const meterService = createMeterService({
+    recordUsage: async (requestId, modelId, promptTokens, completionTokens, totalTokens) => {
+      usageStore.set(requestId, {
+        request_id: requestId, model_id: modelId,
+        prompt_tokens: promptTokens, completion_tokens: completionTokens,
+        total_tokens: totalTokens, created_at: new Date().toISOString(),
+      });
+    },
+  });
+
   const chainRegistry = buildChainRegistry(config);
   const tokenRegistry = buildTokenRegistryFromChains(
     getSupportedChains(config.paymentNetwork),
   );
 
-  // Register Solana assets (include EIP-712 metadata for consistency)
+  // Register Solana assets
   tokenRegistry.register("solana", "USDC", {
     symbol: "USDC",
     decimals: 6,
@@ -300,7 +322,10 @@ export async function buildApp(config: Config) {
   // Scheme Registry — extensible payment scheme dispatch
   // ============================================================
   const schemeRegistry = createSchemeRegistry();
-  schemeRegistry.register(createExactScheme());
+  const settleService = createExactSettleService({
+    facilitatorPrivateKey: config.challengeSecret,
+  });
+  schemeRegistry.register(createExactScheme(settleService));
   // Future schemes: schemeRegistry.register(createUptoScheme());
 
   const paymentChainName = config.paymentChain ?? "base";
@@ -309,26 +334,34 @@ export async function buildApp(config: Config) {
   // ============================================================
   // Service Container
   // ============================================================
+  const _orchestrator = createPaymentOrchestrator({
+    schemeRegistry,
+    chainRegistry,
+    tokenRegistry,
+    replayService: replaySvc,
+    providerRegistry,
+    routerService,
+    meterService,
+    costService,
+    ledgerService,
+    paymentService,
+    traceService,
+    platformFeeBps: config.platformFeeBps,
+    paymentChain: paymentChainName,
+    merchantAddress: config.merchantAddress,
+    offerTtlSeconds: config.challengeTtlSeconds,
+    paymentChainConfig,
+  });
+
   const services: ServiceContainer = {
     providerRegistry,
     schemeRegistry,
-    settleService: createExactSettleService({
-      facilitatorPrivateKey: config.challengeSecret,
-    }),
-    orchestrator: null as unknown as IPaymentOrchestrator, // wired below
-    replayService: createReplayProtectionService(new InMemoryRedis()),
-    routerService: createRouterService({ providerRegistry }),
-    meterService: createMeterService({
-      recordUsage: async (requestId, modelId, promptTokens, completionTokens, totalTokens) => {
-        usageStore.set(requestId, {
-          request_id: requestId, model_id: modelId,
-          prompt_tokens: promptTokens, completion_tokens: completionTokens,
-          total_tokens: totalTokens, created_at: new Date().toISOString(),
-        });
-      },
-    }),
+    orchestrator: _orchestrator,
+    replayService: replaySvc,
+    routerService,
+    meterService,
     costService,
-    paymentService: createPaymentService({ costService }),
+    paymentService,
     platformFeeBps: config.platformFeeBps,
     ledgerService,
     traceService,
@@ -338,27 +371,6 @@ export async function buildApp(config: Config) {
     offerTtlSeconds: config.challengeTtlSeconds,
     paymentChainConfig,
   };
-
-  // Wire orchestrator (depends on other services in the container)
-  services.orchestrator = createPaymentOrchestrator({
-    schemeRegistry: services.schemeRegistry,
-    chainRegistry,
-    tokenRegistry,
-    settleService: services.settleService,
-    replayService: services.replayService,
-    providerRegistry: services.providerRegistry,
-    routerService: services.routerService,
-    meterService: services.meterService,
-    costService: services.costService,
-    ledgerService: services.ledgerService,
-    paymentService: services.paymentService,
-    traceService: services.traceService,
-    platformFeeBps: services.platformFeeBps,
-    paymentChain: services.paymentChain,
-    merchantAddress: services.merchantAddress,
-    offerTtlSeconds: services.offerTtlSeconds,
-    paymentChainConfig: services.paymentChainConfig,
-  });
 
   registerRoutes(app, services);
 
