@@ -1,4 +1,32 @@
-/** Data signed into the challenge_token (HMAC via jose) */
+// ---------------------------------------------------------------------------
+// x402 v2 Types — Public API
+//
+// Primary types follow the x402 v2 standard (as defined by @x402/core v2.14.0).
+// Deprecated v0 types are retained as transitional aliases and will be removed
+// once all consumers migrate to the v2 transport layer.
+// ---------------------------------------------------------------------------
+
+// ===========================================================================
+// x402 v2 Standard Types (primary)
+// ===========================================================================
+
+export type {
+  Caip2Id,
+  PaymentRequirementsV2,
+  PaymentRequiredV2,
+  PaymentPayloadV2,
+  SettlementResponseV2,
+} from "./transport/types.js";
+
+// ===========================================================================
+// Deprecated v0 Types (transitional — will be removed)
+// ===========================================================================
+
+/**
+ * @deprecated Use PaymentRequirementsV2 from transport layer instead.
+ *   Old challenge payload embedded in HMAC-signed challenge tokens.
+ *   Replaced by PaymentPayloadV2.authorization in the x402 v2 exact scheme.
+ */
 export interface ChallengePayload {
   quote_id: string;
   request_hash: string;
@@ -9,26 +37,21 @@ export interface ChallengePayload {
   expires_at: string;
 }
 
-/** Decoded X-402-Payment header */
+/**
+ * @deprecated Use PaymentPayloadV2 from transport layer instead.
+ *   Old on-chain tx_hash based payment proof.
+ *   Replaced by EIP-3009 signature in PaymentPayloadV2.payload.
+ */
 export interface PaymentProof {
   tx_hash: string;
   chain: string;
   payer_address: string;
 }
 
-/** 402 response body shape (API spec section 3.2) */
-export interface PaymentRequirements {
-  quote_id: string;
-  chain: string;
-  asset: string;
-  amount: string;
-  expires_at: string;
-  merchant_address: string;
-  request_hash: string;
-  challenge_token: string;
-}
-
-/** Result of on-chain payment verification */
+/**
+ * @deprecated New verification returns `{ payer: Address }` from exact scheme.
+ *   Kept for backward compat with solana-verify and legacy tests.
+ */
 export interface VerificationResult {
   verified: boolean;
   payer_address: string;
