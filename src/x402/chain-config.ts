@@ -15,6 +15,10 @@ export interface TokenConfig {
   decimals: number;
   address: Address;
   type: "erc20" | "native";
+  /** EIP-712 domain name (e.g., "USD Coin" for USDC). Required for EIP-3009 signature verification. */
+  eip712Name: string;
+  /** EIP-712 domain version (e.g., "2" for USDC). Required for EIP-3009 signature verification. */
+  eip712Version: string;
 }
 
 export interface ChainConfig {
@@ -23,8 +27,19 @@ export interface ChainConfig {
   tokens: Record<string, TokenConfig>;
 }
 
-function token(symbol: string, decimals: number, address: Address, type: "erc20" | "native"): TokenConfig {
-  return { symbol, decimals, address, type };
+function token(
+  symbol: string,
+  decimals: number,
+  address: Address,
+  type: "erc20" | "native",
+  eip712Name: string,
+  eip712Version: string,
+): TokenConfig {
+  return { symbol, decimals, address, type, eip712Name, eip712Version };
+}
+
+function usdcToken(decimals: number, address: Address, eip712Name: string): TokenConfig {
+  return token("USDC", decimals, address, "erc20", eip712Name, "2");
 }
 
 export const MAINNET_CHAINS: Record<string, ChainConfig> = {
@@ -32,42 +47,42 @@ export const MAINNET_CHAINS: Record<string, ChainConfig> = {
     chain: mainnet,
     usdcAddress: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
     tokens: {
-      USDC: token("USDC", 6, "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", "erc20"),
+      USDC: usdcToken(6, "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", "USD Coin"),
     },
   },
   base: {
     chain: base,
     usdcAddress: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
     tokens: {
-      USDC: token("USDC", 6, "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "erc20"),
+      USDC: usdcToken(6, "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "USD Coin"),
     },
   },
   arbitrum: {
     chain: arbitrum,
     usdcAddress: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
     tokens: {
-      USDC: token("USDC", 6, "0xaf88d065e77c8cC2239327C5EDb3A432268e5831", "erc20"),
+      USDC: usdcToken(6, "0xaf88d065e77c8cC2239327C5EDb3A432268e5831", "USD Coin"),
     },
   },
   optimism: {
     chain: optimism,
     usdcAddress: "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
     tokens: {
-      USDC: token("USDC", 6, "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85", "erc20"),
+      USDC: usdcToken(6, "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85", "USD Coin"),
     },
   },
   polygon: {
     chain: polygon,
     usdcAddress: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
     tokens: {
-      USDC: token("USDC", 6, "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359", "erc20"),
+      USDC: usdcToken(6, "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359", "USD Coin"),
     },
   },
   avalanche: {
     chain: avalanche,
     usdcAddress: "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E",
     tokens: {
-      USDC: token("USDC", 6, "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E", "erc20"),
+      USDC: usdcToken(6, "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E", "USD Coin"),
     },
   },
 };
@@ -77,14 +92,14 @@ export const TESTNET_CHAINS: Record<string, ChainConfig> = {
     chain: sepolia,
     usdcAddress: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
     tokens: {
-      USDC: token("USDC", 6, "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238", "erc20"),
+      USDC: usdcToken(6, "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238", "USD Coin"),
     },
   },
   "base-sepolia": {
     chain: baseSepolia,
     usdcAddress: "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
     tokens: {
-      USDC: token("USDC", 6, "0x036CbD53842c5426634e7929541eC2318f3dCF7e", "erc20"),
+      USDC: usdcToken(6, "0x036CbD53842c5426634e7929541eC2318f3dCF7e", "USD Coin"),
     },
   },
 };

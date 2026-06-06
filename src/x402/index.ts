@@ -17,7 +17,22 @@ export {
 export { decodePaymentPayload } from "./transport/decode.js";
 export { chainToCaip2, caip2ToChain, isKnownCaip2 } from "./transport/caip2.js";
 
+// Shared utilities
+export { computeRequestHash } from "./hash.js";
+
+// Scheme System — extensible payment scheme architecture
+export type {
+  PaymentScheme,
+  SchemeVerifyContext,
+  SchemeSettleContext,
+} from "./schemes/types.js";
+export {
+  createSchemeRegistry,
+  type ISchemeRegistry,
+} from "./schemes/registry.js";
+
 // Exact Scheme (EIP-3009)
+export { createExactScheme } from "./schemes/exact/index.js";
 export {
   createExactVerifyService,
   type IExactVerifyService,
@@ -29,7 +44,7 @@ export {
   type IExactSettleService,
 } from "./schemes/exact/settle.service.js";
 
-// Payment Verification (unified entry point)
+// Legacy Payment Verification (compatibility wrapper)
 export {
   createPaymentVerifyService,
   type IPaymentVerifyService,
@@ -42,6 +57,6 @@ export type {
   VerificationResult,
 } from "./types.js";
 
-// Other services (unchanged)
+// Other services
 export { createReplayProtectionService } from "./replay.service.js";
 export type { IReplayProtectionService } from "./replay.service.js";

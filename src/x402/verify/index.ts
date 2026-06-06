@@ -1,12 +1,12 @@
 // ---------------------------------------------------------------------------
-// x402 Payment Verification Service — Unified Entry Point
+// x402 Payment Verification Service — Legacy Compatibility Wrapper
 //
-// Routes payment verification to the appropriate scheme:
-//   - EVM chains → exact scheme (EIP-3009 signature verification)
-//   - Solana    → solana-verify.service.ts (unchanged, tx_hash based)
+// NOTE: The primary verification path is now through the SchemeRegistry
+// (see src/x402/schemes/). This file exists for backward compatibility
+// with tests and simulation environments that still use the old interface.
 //
-// Both old (tx_hash) and new (EIP-3009) verification paths are supported
-// during the transition period. New flows should use verifyPaymentV2().
+// New production code should use SchemeRegistry.verify() instead of
+// IPaymentVerifyService.verifyPaymentV2().
 // ---------------------------------------------------------------------------
 
 import type { Address } from "viem";
@@ -36,9 +36,8 @@ import { PaymentVerificationFailedError } from "../../errors.js";
 
 export interface IPaymentVerifyService {
   /**
-   * @deprecated Use verifyPaymentV2() for new x402 v2 flows.
+   * @deprecated Use SchemeRegistry.verify() for new flows.
    *   Legacy verification based on tx_hash lookup.
-   *   Kept for backward compatibility during migration.
    */
   verifyPayment(
     proof: PaymentProof,
@@ -46,12 +45,8 @@ export interface IPaymentVerifyService {
   ): Promise<VerificationResult>;
 
   /**
-   * Verify payment using x402 v2 PaymentPayload (EIP-3009 signature).
-   * Primary verification path for the x402 v2 exact scheme.
-   *
-   * @param paymentPayload - Decoded x402 v2 payment payload
-   * @param merchantAddress - Gateway facilitator/merchant address
-   * @returns Verified payer address
+   * @deprecated Use SchemeRegistry.verify() for new flows.
+   *   Verify payment using x402 v2 PaymentPayload.
    */
   verifyPaymentV2(
     paymentPayload: PaymentPayloadV2,
@@ -80,7 +75,7 @@ export function createPaymentVerifyService(deps: {
   const { chainRegistry, tokenRegistry } = deps;
 
   return {
-    // Legacy method — kept for transitional backward compatibility
+    // Legacy tx_hash verification — used by simulation tests
     async verifyPayment(
       proof: PaymentProof,
       challenge: ChallengePayload,
@@ -96,9 +91,6 @@ export function createPaymentVerifyService(deps: {
         return solanaVerifier.verifyPayment(proof, challenge);
       }
 
-      // For EVM chains, legacy path is no longer the primary method.
-      // Delegate to the EVM verifier's tx_hash logic (kept for compat).
-      // In practice, all new flows will use verifyPaymentV2() instead.
       const { createEvmVerifyService } = await import(
         "./evm-verify.service.js"
       );
@@ -109,7 +101,7 @@ export function createPaymentVerifyService(deps: {
       return evmVerifier.verifyPayment(proof, challenge);
     },
 
-    // New v2 primary verification path
+    // v2 verification — delegates to exact scheme (EIP-3009)
     async verifyPaymentV2(
       paymentPayload: PaymentPayloadV2,
       merchAddr: string,
@@ -124,14 +116,12 @@ export function createPaymentVerifyService(deps: {
         );
       }
 
-      // Solana fallback — keep existing logic for now
       if (chainName === "solana") {
         if (!solanaVerifier) {
           throw new PaymentVerificationFailedError(
-            "Solana verification is not configured. Set SOLANA_RPC_URL.",
+            "Solana verification is not configured.",
           );
         }
-        // Convert v2 payload to legacy format for solana-verify
         const legacyProof: PaymentProof = {
           tx_hash: (paymentPayload.payload as Record<string, unknown>)[
             "tx_hash"
@@ -176,8 +166,9 @@ export function createPaymentVerifyService(deps: {
       }
 
       const tokenMeta: TokenMeta = {
-        name: tokenConfig.symbol,
-        version: "2", // USDC v2 for EIP-3009
+        // Use EIP-712 domain name from token config, not the symbol
+        name: tokenConfig.eip712Name,
+        version: tokenConfig.eip712Version,
         address: tokenConfig.address,
         decimals: tokenConfig.decimals,
       };

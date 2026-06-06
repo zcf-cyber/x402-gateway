@@ -261,14 +261,38 @@ describe("ExactVerifyService — EIP-3009", () => {
 
   it("should reject tampered signature", async () => {
     const payload = await createSignedPayload();
-    // Tamper with the signature
+    // Replace signature with a completely different one (from a different key)
+    const wrongKey = generatePrivateKey();
+    const wrongAccount = privateKeyToAccount(wrongKey);
     const sigData = payload.payload as Record<string, unknown>;
-    const sig = sigData["signature"] as string;
-    const tamperedSig =
-      sig.slice(0, -4) +
-      (sig[sig.length - 1] === "a" ? "b" : "a") +
-      sig.slice(-3);
-    sigData["signature"] = tamperedSig;
+    const wrongSig = await wrongAccount.signTypedData({
+      domain: {
+        name: TEST_TOKEN.name,
+        version: TEST_TOKEN.version,
+        chainId: TEST_CHAIN_ID,
+        verifyingContract: TEST_TOKEN.address,
+      },
+      types: {
+        TransferWithAuthorization: [
+          { name: "from", type: "address" },
+          { name: "to", type: "address" },
+          { name: "value", type: "uint256" },
+          { name: "validAfter", type: "uint256" },
+          { name: "validBefore", type: "uint256" },
+          { name: "nonce", type: "bytes32" },
+        ],
+      },
+      primaryType: "TransferWithAuthorization",
+      message: {
+        from: getAddress((sigData["authorization"] as Record<string, string>)["from"]!),
+        to: getAddress((sigData["authorization"] as Record<string, string>)["to"]!),
+        value: BigInt((sigData["authorization"] as Record<string, string>)["value"]!),
+        validAfter: BigInt((sigData["authorization"] as Record<string, string>)["validAfter"]!),
+        validBefore: BigInt((sigData["authorization"] as Record<string, string>)["validBefore"]!),
+        nonce: (sigData["authorization"] as Record<string, string>)["nonce"]! as `0x${string}`,
+      },
+    });
+    sigData["signature"] = wrongSig;
 
     await expect(
       service.verifyExactPayment(
