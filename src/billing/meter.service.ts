@@ -85,8 +85,9 @@ export function createMeterService(deps: MeterServiceDeps): IMeterService {
         throw new Error('Invalid token counts: negative values not allowed');
       }
 
-      // Build UsageRecord
-      const cachedTokens = usage.prompt_tokens_details?.cached_tokens ?? 0;
+      // Build UsageRecord — clamp cached_tokens to upstream prompt_tokens
+      const rawCachedTokens = usage.prompt_tokens_details?.cached_tokens ?? 0;
+      const cachedTokens = Math.max(0, Math.min(rawCachedTokens, usage.prompt_tokens));
       const usageRecord: UsageRecord = {
         request_id: requestId,
         model_id: modelId,

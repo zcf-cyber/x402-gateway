@@ -294,5 +294,44 @@ describe("PaymentService", () => {
 
       expect(r1).toBe(r2);
     });
+
+    it("should return '0' not empty string for zero-cost requests", () => {
+      const service = makeService();
+      // Zero input tokens → zero cost → should return "0", not ""
+      const request: ChatCompletionRequest = {
+        model: "openai/gpt-4o",
+        messages: [{ role: "user", content: "" }],
+        max_tokens: 0,
+      };
+
+      const amount = service.estimateMaxAmount(
+        request,
+        TEST_PRICING,
+        TEST_FEE_BPS,
+      );
+
+      expect(amount).toBe("0");
+      expect(amount).not.toBe("");
+    });
+
+    it("should return a valid number string for minimal request", () => {
+      const service = makeService();
+      const request: ChatCompletionRequest = {
+        model: "openai/gpt-4o",
+        messages: [{ role: "user", content: "Hi" }],
+        max_tokens: 1,
+      };
+
+      const amount = service.estimateMaxAmount(
+        request,
+        TEST_PRICING,
+        TEST_FEE_BPS,
+      );
+
+      // Must be a parseable, non-negative number string
+      expect(parseFloat(amount)).toBeGreaterThanOrEqual(0);
+      expect(amount).not.toBe("");
+      expect(amount).not.toBe("NaN");
+    });
   });
 });

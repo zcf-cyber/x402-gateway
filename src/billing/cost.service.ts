@@ -186,9 +186,10 @@ export function createCostService(deps?: CostServiceDeps): ICostService {
     //   + cached_tokens * cached_price
     //   + completion_tokens * output_price
     const cachedTokens = usage.cached_tokens ?? 0;
-    const nonCachedPrompt = Math.max(0, usage.prompt_tokens - cachedTokens);
+    const safeCachedTokens = Math.max(0, Math.min(cachedTokens, usage.prompt_tokens));
+    const nonCachedPrompt = Math.max(0, usage.prompt_tokens - safeCachedTokens);
     const promptCostPico = BigInt(nonCachedPrompt) * inputPricePico;
-    const cachedCostPico = BigInt(cachedTokens) * cachedPricePico;
+    const cachedCostPico = BigInt(safeCachedTokens) * cachedPricePico;
     const completionCostPico =
       BigInt(usage.completion_tokens) * outputPricePico;
     const subtotalPico = promptCostPico + cachedCostPico + completionCostPico;
@@ -208,7 +209,7 @@ export function createCostService(deps?: CostServiceDeps): ICostService {
     if (log) {
       log("Cost calculated", {
         prompt_tokens: usage.prompt_tokens,
-        cached_tokens: cachedTokens,
+        cached_tokens: safeCachedTokens,
         completion_tokens: usage.completion_tokens,
         input_price: pricing.input_usd_per_token,
         cached_price: pricing.cached_usd_per_token,
@@ -259,6 +260,12 @@ export function createCostService(deps?: CostServiceDeps): ICostService {
       // Prices must be non-negative
       if (inputPrice < 0 || outputPrice < 0) {
         return false;
+      }
+
+      // Validate cached price if provided
+      if (pricing.cached_usd_per_token) {
+        const cachedPrice = parseToPicoDollars(pricing.cached_usd_per_token);
+        if (cachedPrice < 0) return false;
       }
 
       return true;

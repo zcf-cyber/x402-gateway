@@ -189,7 +189,9 @@ export function createPaymentService(deps: PaymentServiceDeps): IPaymentService 
     const rawCost = estimateTotalCost(tokens, pricing, feeBps);
     // Apply safety margin: 1.2x to account for estimation inaccuracy
     const maxAmount = parseFloat(rawCost) * COST_SAFETY_MARGIN;
-    return maxAmount.toFixed(9).replace(/0+$/, "").replace(/\.$/, "");
+    // Guard against floating-point edge cases (NaN, negative, zero → empty string)
+    const formatted = maxAmount.toFixed(9).replace(/0+$/, "").replace(/\.$/, "");
+    return formatted || "0";
   }
 
   return {

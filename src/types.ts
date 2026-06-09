@@ -52,7 +52,7 @@ export interface UsageReceipt {
   model_used: string;
   unit_price_input_usd: string;
   unit_price_output_usd: string;
-  unit_price_cached_usd: string;
+  unit_price_cached_usd?: string;
   total_cost_usd: string;
   route_proof_hash: string;
 }

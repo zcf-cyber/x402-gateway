@@ -544,5 +544,51 @@ describe("CostService", () => {
         }),
       );
     });
+
+    it("should clamp cached_tokens when greater than prompt_tokens", () => {
+      const service = createCostService();
+      // cached_tokens: 500 but prompt_tokens: 100 — should clamp to 100
+      const usage = createTestUsageWithCached(100, 50, 500);
+      const pricing = createTestPricingWithCached(
+        "0.00001",
+        "0.00003",
+        "0.000005",
+      );
+
+      const result = service.calculateCost(usage, pricing, 50);
+
+      // All 100 prompt tokens treated as cached (clamped to prompt_tokens)
+      // non-cached = max(0, 100 - 500) = 0
+      // cached cost = 100 * 0.000005 = 0.0005
+      // completion cost = 50 * 0.00003 = 0.0015
+      // subtotal = 0.0005 + 0.0015 = 0.002
+      expect(result.subtotal_usd).toBe("0.002");
+    });
+  });
+
+  describe("validatePricing - cached token price", () => {
+    it("should reject negative cached price", () => {
+      const service = createCostService();
+      const pricing: ModelPricing = {
+        input_usd_per_token: "0.00001",
+        output_usd_per_token: "0.00003",
+        cached_usd_per_token: "-0.000005",
+        effective_at: "2026-06-09T00:00:00Z",
+      };
+
+      expect(service.validatePricing(pricing)).toBe(false);
+    });
+
+    it("should accept valid cached price", () => {
+      const service = createCostService();
+      const pricing: ModelPricing = {
+        input_usd_per_token: "0.00001",
+        output_usd_per_token: "0.00003",
+        cached_usd_per_token: "0.000005",
+        effective_at: "2026-06-09T00:00:00Z",
+      };
+
+      expect(service.validatePricing(pricing)).toBe(true);
+    });
   });
 });
