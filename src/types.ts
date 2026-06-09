@@ -24,6 +24,7 @@ export interface ChatCompletionRequest {
   model: string;
   messages: ChatMessage[];
   temperature?: number;
+  max_tokens?: number;
   stream?: boolean;
 }
 
@@ -37,6 +38,11 @@ export interface TokenUsage {
   prompt_tokens: number;
   completion_tokens: number;
   total_tokens: number;
+  /** OpenAI-compatible: cached_tokens within prompt_tokens_details */
+  prompt_tokens_details?: {
+    cached_tokens?: number;
+    audio_tokens?: number;
+  };
 }
 
 export interface UsageReceipt {
@@ -46,6 +52,7 @@ export interface UsageReceipt {
   model_used: string;
   unit_price_input_usd: string;
   unit_price_output_usd: string;
+  unit_price_cached_usd: string;
   total_cost_usd: string;
   route_proof_hash: string;
 }
@@ -67,6 +74,8 @@ export interface ChatCompletionResponse {
 export interface ModelPricing {
   input_usd_per_token: string;
   output_usd_per_token: string;
+  /** Cached/prompt-cache-hit token price (USD per token). Optional for backward compat. */
+  cached_usd_per_token?: string;
   effective_at: string;
 }
 

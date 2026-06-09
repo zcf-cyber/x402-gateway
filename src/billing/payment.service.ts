@@ -26,6 +26,13 @@ const DEFAULT_MAX_COMPLETION_TOKENS = 4096;
 /** Approximate token-to-character ratio for English text. */
 const CHARS_PER_TOKEN = 4;
 
+/**
+ * Safety margin multiplier for estimated cost.
+ * 1.2x covers typical estimation errors (chars/4 heuristic + prompt variations).
+ * Formula: upto_amount = raw_estimated_cost × SAFETY_MARGIN
+ */
+export const COST_SAFETY_MARGIN = 1.2;
+
 /** Estimated token counts from a chat completion request. */
 export interface EstimatedTokens {
   estimated_prompt_tokens: number;
@@ -43,7 +50,7 @@ export interface IPaymentService {
    *
    * Heuristic:
    *   - Prompt tokens ≈ ceil(total_message_characters / 4)
-   *   - Completion tokens = DEFAULT_MAX_COMPLETION_TOKENS (4096)
+   *   - Completion tokens = request.max_tokens || DEFAULT_MAX_COMPLETION_TOKENS (4096)
    *
    * This provides a conservative upper bound for the "upto" scheme.
    *
@@ -51,6 +58,25 @@ export interface IPaymentService {
    * @returns Estimated token counts
    */
   estimateTokens(request: ChatCompletionRequest): EstimatedTokens;
+
+  /**
+   * Calculate the estimated maximum amount for an upto payment.
+   *
+   * Applies a 1.2x safety margin to the raw estimate to account for
+   * token estimation inaccuracy (chars/4 heuristic).
+   *
+   * Formula: maxAmount = estimateTotalCost(tokens, pricing, feeBps) × COST_SAFETY_MARGIN
+   *
+   * @param request - The chat completion request
+   * @param pricing - Model pricing
+   * @param feeBps - Platform fee in basis points
+   * @returns Maximum amount as decimal string (e.g., "0.0012")
+   */
+  estimateMaxAmount(
+    request: ChatCompletionRequest,
+    pricing: ModelPricing,
+    feeBps: number,
+  ): string;
 
   /**
    * Calculate the total estimated cost based on token estimates and model pricing.
@@ -107,7 +133,8 @@ export function createPaymentService(deps: PaymentServiceDeps): IPaymentService 
       0,
     );
     const estimatedPromptTokens = Math.ceil(totalChars / CHARS_PER_TOKEN);
-    const estimatedCompletionTokens = DEFAULT_MAX_COMPLETION_TOKENS;
+    // Use request.max_tokens if provided, otherwise default to 4096
+    const estimatedCompletionTokens = request.max_tokens ?? DEFAULT_MAX_COMPLETION_TOKENS;
 
     return {
       estimated_prompt_tokens: estimatedPromptTokens,
@@ -153,9 +180,22 @@ export function createPaymentService(deps: PaymentServiceDeps): IPaymentService 
     }
   }
 
+  function estimateMaxAmount(
+    request: ChatCompletionRequest,
+    pricing: ModelPricing,
+    feeBps: number,
+  ): string {
+    const tokens = estimateTokens(request);
+    const rawCost = estimateTotalCost(tokens, pricing, feeBps);
+    // Apply safety margin: 1.2x to account for estimation inaccuracy
+    const maxAmount = parseFloat(rawCost) * COST_SAFETY_MARGIN;
+    return maxAmount.toFixed(9).replace(/0+$/, "").replace(/\.$/, "");
+  }
+
   return {
     estimateTokens,
     estimateTotalCost,
     validatePayment,
+    estimateMaxAmount,
   };
 }

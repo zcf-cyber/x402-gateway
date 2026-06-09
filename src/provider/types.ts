@@ -12,6 +12,11 @@ export interface UpstreamResponse {
     prompt_tokens: number;
     completion_tokens: number;
     total_tokens: number;
+    /** OpenAI-compatible: prompt_tokens_details from upstream response */
+    prompt_tokens_details?: {
+      cached_tokens?: number;
+      audio_tokens?: number;
+    };
   };
   latency_ms: number;
 }

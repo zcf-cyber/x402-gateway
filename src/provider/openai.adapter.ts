@@ -27,6 +27,10 @@ interface OpenAIResponse {
     prompt_tokens: number;
     completion_tokens: number;
     total_tokens: number;
+    prompt_tokens_details?: {
+      cached_tokens?: number;
+      audio_tokens?: number;
+    };
   };
 }
 
@@ -138,6 +142,7 @@ export class OpenAIAdapter extends BaseProviderAdapter {
           prompt_tokens: data.usage.prompt_tokens,
           completion_tokens: data.usage.completion_tokens,
           total_tokens: data.usage.total_tokens,
+          prompt_tokens_details: data.usage.prompt_tokens_details,
         },
         latency_ms: latencyMs,
       };

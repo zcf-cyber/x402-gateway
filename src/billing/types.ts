@@ -15,6 +15,8 @@ export interface UsageRecord {
   completion_tokens: number;
   /** Total tokens consumed (should be >= prompt + completion) */
   total_tokens: number;
+  /** Number of prompt tokens served from cache (subset of prompt_tokens) */
+  cached_tokens?: number;
 }
 
 /**
@@ -22,7 +24,7 @@ export interface UsageRecord {
  * All amounts are string-encoded decimals to avoid floating-point precision issues.
  */
 export interface CostBreakdown {
-  /** Base cost calculated from input/output tokens and unit prices (USD) */
+  /** Base cost calculated from input/output/tokens and unit prices (USD) */
   subtotal_usd: string;
   /** Platform service fee (USD) */
   platform_fee_usd: string;
@@ -32,6 +34,8 @@ export interface CostBreakdown {
   unit_price_input: string;
   /** Price per output token (USD as string) */
   unit_price_output: string;
+  /** Price per cached token (USD as string, empty string if not applicable) */
+  unit_price_cached?: string;
 }
 
 /**

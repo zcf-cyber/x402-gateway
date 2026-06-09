@@ -218,62 +218,76 @@ export async function buildApp(config: Config) {
   const providerRegistry = createProviderRegistry();
 
   if (config.openaiApiKey) {
+    // [PLACEHOLDER/DEMO] gpt-4o pricing — 需要确认正式价格后修改
     providerRegistry.register("gpt-4o", new OpenAIAdapter(
       config.openaiApiKey,
       config.openaiBaseUrl || "https://api.openai.com/v1",
     ), {
       input_usd_per_token: "0.0000025",
       output_usd_per_token: "0.00001",
+      cached_usd_per_token: "0.00000125", // [PLACEHOLDER] 50% of input, 需确认
       effective_at: new Date().toISOString(),
     });
   }
 
   if (config.minimaxApiKey) {
     const minimaxBaseUrl = config.minimaxBaseUrl || "https://api.minimaxi.com/v1";
+    // [CONFIRMED] MiniMax-M2.5 = MiMo-V2.5, pricing from MiMo official
     providerRegistry.register("MiniMax-M2.5", new OpenAIAdapter(config.minimaxApiKey, minimaxBaseUrl), {
-      input_usd_per_token: "0.0000005",
-      output_usd_per_token: "0.000002",
+      input_usd_per_token: "0.00000014",    // $0.14 per 1M tokens (cache miss)
+      output_usd_per_token: "0.00000028",   // $0.28 per 1M tokens
+      cached_usd_per_token: "0.0000000028", // $0.0028 per 1M tokens (cache hit)
       effective_at: new Date().toISOString(),
     });
+    // [CONFIRMED] MiniMax-M2.7 = MiMo-V2.5-Pro, pricing from MiMo official
     providerRegistry.register("MiniMax-M2.7", new OpenAIAdapter(config.minimaxApiKey, minimaxBaseUrl), {
-      input_usd_per_token: "0.000001",
-      output_usd_per_token: "0.000004",
+      input_usd_per_token: "0.000000435",    // $0.435 per 1M tokens (cache miss)
+      output_usd_per_token: "0.00000087",    // $0.87 per 1M tokens
+      cached_usd_per_token: "0.0000000036",  // $0.0036 per 1M tokens (cache hit)
       effective_at: new Date().toISOString(),
     });
   }
 
   if (config.moonshotApiKey) {
+    // [PLACEHOLDER/DEMO] kimi-k2.6 pricing — 需要确认正式价格后修改
     providerRegistry.register("kimi-k2.6", new OpenAIAdapter(
       config.moonshotApiKey,
       config.moonshotBaseUrl || "https://api.moonshot.cn/v1",
     ), {
-      input_usd_per_token: "0.0000005",
-      output_usd_per_token: "0.000002",
+      input_usd_per_token: "0.0000005",    // [PLACEHOLDER]
+      output_usd_per_token: "0.000002",    // [PLACEHOLDER]
+      cached_usd_per_token: "0.00000025",  // [PLACEHOLDER] 50% of input, 需确认
       effective_at: new Date().toISOString(),
     });
   }
 
   if (config.zhipuApiKey) {
+    // [PLACEHOLDER/DEMO] glm-5.1 pricing — 需要确认正式价格后修改
     providerRegistry.register("glm-5.1", new OpenAIAdapter(
       config.zhipuApiKey,
       config.zhipuBaseUrl || "https://open.bigmodel.cn/api/paas/v4",
     ), {
-      input_usd_per_token: "0.0000005",
-      output_usd_per_token: "0.000002",
+      input_usd_per_token: "0.0000005",    // [PLACEHOLDER]
+      output_usd_per_token: "0.000002",    // [PLACEHOLDER]
+      cached_usd_per_token: "0.00000025",  // [PLACEHOLDER] 50% of input, 需确认
       effective_at: new Date().toISOString(),
     });
   }
 
   if (config.deepseekApiKey) {
     const deepseekBaseUrl = config.deepseekBaseUrl || "https://api.deepseek.com/v1";
+    // [CONFIRMED] deepseek-v4-pro pricing from DeepSeek official
     providerRegistry.register("deepseek-v4-pro", new OpenAIAdapter(config.deepseekApiKey, deepseekBaseUrl), {
-      input_usd_per_token: "0.00000014",
-      output_usd_per_token: "0.0000004",
+      input_usd_per_token: "0.000000435",    // $0.435 per 1M tokens (cache miss)
+      output_usd_per_token: "0.00000087",    // $0.87 per 1M tokens
+      cached_usd_per_token: "0.000000003625", // $0.003625 per 1M tokens (cache hit)
       effective_at: new Date().toISOString(),
     });
+    // [CONFIRMED] deepseek-v4-flash pricing from DeepSeek official
     providerRegistry.register("deepseek-v4-flash", new OpenAIAdapter(config.deepseekApiKey, deepseekBaseUrl), {
-      input_usd_per_token: "0.00000014",
-      output_usd_per_token: "0.00000028",
+      input_usd_per_token: "0.00000014",    // $0.14 per 1M tokens (cache miss)
+      output_usd_per_token: "0.00000028",   // $0.28 per 1M tokens
+      cached_usd_per_token: "0.0000000028", // $0.0028 per 1M tokens (cache hit)
       effective_at: new Date().toISOString(),
     });
   }
@@ -284,6 +298,7 @@ export async function buildApp(config: Config) {
   const usageStore = new Map<string, {
     request_id: string; model_id: string;
     prompt_tokens: number; completion_tokens: number; total_tokens: number;
+    cached_tokens?: number;
     created_at: string;
   }>();
 
@@ -294,11 +309,12 @@ export async function buildApp(config: Config) {
   const routerService = createRouterService({ providerRegistry });
   const paymentService = createPaymentService({ costService });
   const meterService = createMeterService({
-    recordUsage: async (requestId, modelId, promptTokens, completionTokens, totalTokens) => {
+    recordUsage: async (requestId, modelId, promptTokens, completionTokens, totalTokens, cachedTokens) => {
       usageStore.set(requestId, {
         request_id: requestId, model_id: modelId,
         prompt_tokens: promptTokens, completion_tokens: completionTokens,
-        total_tokens: totalTokens, created_at: new Date().toISOString(),
+        total_tokens: totalTokens, cached_tokens: cachedTokens,
+        created_at: new Date().toISOString(),
       });
     },
   });
