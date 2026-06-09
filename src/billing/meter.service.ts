@@ -13,6 +13,7 @@ export interface MeterServiceDeps {
     promptTokens: number,
     completionTokens: number,
     totalTokens: number,
+    cachedTokens?: number,
   ) => Promise<void>;
 }
 
@@ -84,13 +85,16 @@ export function createMeterService(deps: MeterServiceDeps): IMeterService {
         throw new Error('Invalid token counts: negative values not allowed');
       }
 
-      // Build UsageRecord
+      // Build UsageRecord — clamp cached_tokens to upstream prompt_tokens
+      const rawCachedTokens = usage.prompt_tokens_details?.cached_tokens ?? 0;
+      const cachedTokens = Math.max(0, Math.min(rawCachedTokens, usage.prompt_tokens));
       const usageRecord: UsageRecord = {
         request_id: requestId,
         model_id: modelId,
         prompt_tokens: usage.prompt_tokens,
         completion_tokens: usage.completion_tokens,
         total_tokens: usage.total_tokens,
+        cached_tokens: cachedTokens > 0 ? cachedTokens : undefined,
       };
 
       // Persist to database
@@ -100,6 +104,7 @@ export function createMeterService(deps: MeterServiceDeps): IMeterService {
         usageRecord.prompt_tokens,
         usageRecord.completion_tokens,
         usageRecord.total_tokens,
+        cachedTokens,
       );
 
       // Store in memory for getUsage retrieval

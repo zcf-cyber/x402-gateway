@@ -404,4 +404,191 @@ describe("CostService", () => {
       expect(convenienceResult).toEqual(manualResult);
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // Three-tier pricing: cached token support (Issue #76 + #45)
+  // ---------------------------------------------------------------------------
+
+  describe("calculateCost - cached tokens (three-tier pricing)", () => {
+    const createTestPricingWithCached = (
+      inputPrice: string,
+      outputPrice: string,
+      cachedPrice?: string,
+    ): ModelPricing => ({
+      input_usd_per_token: inputPrice,
+      output_usd_per_token: outputPrice,
+      cached_usd_per_token: cachedPrice,
+      effective_at: "2026-06-09T00:00:00Z",
+    });
+
+    const createTestUsageWithCached = (
+      promptTokens: number,
+      completionTokens: number,
+      cachedTokens?: number,
+    ): UsageRecord => ({
+      request_id: "req-test-cached" as RequestId,
+      model_id: "deepseek-v4-pro",
+      prompt_tokens: promptTokens,
+      completion_tokens: completionTokens,
+      total_tokens: promptTokens + completionTokens,
+      cached_tokens: cachedTokens,
+    });
+
+    it("should charge cached tokens at cached price", () => {
+      const service = createCostService();
+      // deepseek-v4-pro: cached=$0.000000003625, input=$0.000000435, output=$0.00000087
+      const usage = createTestUsageWithCached(1000000, 500000, 200000);
+      const pricing = createTestPricingWithCached(
+        "0.000000435",
+        "0.00000087",
+        "0.000000003625",
+      );
+
+      const result = service.calculateCost(usage, pricing, 50);
+
+      // non-cached prompt = 1000000 - 200000 = 800000
+      // prompt cost = 800000 * 0.000000435 = 0.348
+      // cached cost = 200000 * 0.000000003625 = 0.000725
+      // completion cost = 500000 * 0.00000087 = 0.435
+      // subtotal = 0.348 + 0.000725 + 0.435 = 0.783725
+      expect(result.subtotal_usd).toBe("0.783725");
+      expect(result.unit_price_cached).toBe("0.000000003625");
+    });
+
+    it("should handle zero cached tokens (all prompt charged at input price)", () => {
+      const service = createCostService();
+      const usage = createTestUsageWithCached(1000, 500, 0);
+      const pricing = createTestPricingWithCached(
+        "0.00001",
+        "0.00003",
+        "0.000005",
+      );
+
+      const result = service.calculateCost(usage, pricing, 50);
+
+      // non-cached = 1000 - 0 = 1000
+      // cached cost = 0 * 0.000005 = 0
+      // subtotal = 1000*0.00001 + 500*0.00003 = 0.01 + 0.015 = 0.025
+      expect(result.subtotal_usd).toBe("0.025");
+      expect(result.unit_price_cached).toBe("0.000005");
+    });
+
+    it("should handle all prompt tokens cached", () => {
+      const service = createCostService();
+      const usage = createTestUsageWithCached(5000, 1000, 5000);
+      const pricing = createTestPricingWithCached(
+        "0.00001",
+        "0.00003",
+        "0.000005",
+      );
+
+      const result = service.calculateCost(usage, pricing, 50);
+
+      // non-cached = 5000 - 5000 = 0
+      // cached cost = 5000 * 0.000005 = 0.025
+      // completion cost = 1000 * 0.00003 = 0.03
+      // subtotal = 0 + 0.025 + 0.03 = 0.055
+      expect(result.subtotal_usd).toBe("0.055");
+    });
+
+    it("should fall back to input price when no cached price defined", () => {
+      const service = createCostService();
+      // No cached_usd_per_token → falls back to input price
+      const pricing = createTestPricingWithCached("0.00001", "0.00003");
+      const usage = createTestUsageWithCached(1000, 500, 200);
+
+      const result = service.calculateCost(usage, pricing, 50);
+
+      // Cached tokens charged at input price (fallback)
+      // non-cached = 1000 - 200 = 800
+      // All prompt tokens (including cached) effectively at input price
+      // 1000 * 0.00001 + 500 * 0.00003 = 0.025
+      expect(result.subtotal_usd).toBe("0.025");
+      expect(result.unit_price_cached).toBe("");
+    });
+
+    it("should handle nano-dollar scale cached price", () => {
+      const service = createCostService();
+      // deepseek-v4-flash: cached=$0.0000000028 per token
+      const usage = createTestUsageWithCached(100000, 0, 100000);
+      const pricing = createTestPricingWithCached(
+        "0.00000014",
+        "0.00000028",
+        "0.0000000028",
+      );
+
+      const result = service.calculateCost(usage, pricing, 50);
+
+      // All 100000 tokens are cached
+      // 100000 * 0.0000000028 = 0.00028
+      expect(result.subtotal_usd).toBe("0.00028");
+    });
+
+    it("should include cached info in log output", () => {
+      const logger = vi.fn();
+      const service = createCostService({ log: logger });
+      const usage = createTestUsageWithCached(1000, 500, 200);
+      const pricing = createTestPricingWithCached(
+        "0.00001",
+        "0.00003",
+        "0.000005",
+      );
+
+      service.calculateCost(usage, pricing, 50);
+
+      expect(logger).toHaveBeenCalledWith(
+        "Cost calculated",
+        expect.objectContaining({
+          cached_tokens: 200,
+          cached_price: "0.000005",
+        }),
+      );
+    });
+
+    it("should clamp cached_tokens when greater than prompt_tokens", () => {
+      const service = createCostService();
+      // cached_tokens: 500 but prompt_tokens: 100 — should clamp to 100
+      const usage = createTestUsageWithCached(100, 50, 500);
+      const pricing = createTestPricingWithCached(
+        "0.00001",
+        "0.00003",
+        "0.000005",
+      );
+
+      const result = service.calculateCost(usage, pricing, 50);
+
+      // All 100 prompt tokens treated as cached (clamped to prompt_tokens)
+      // non-cached = max(0, 100 - 500) = 0
+      // cached cost = 100 * 0.000005 = 0.0005
+      // completion cost = 50 * 0.00003 = 0.0015
+      // subtotal = 0.0005 + 0.0015 = 0.002
+      expect(result.subtotal_usd).toBe("0.002");
+    });
+  });
+
+  describe("validatePricing - cached token price", () => {
+    it("should reject negative cached price", () => {
+      const service = createCostService();
+      const pricing: ModelPricing = {
+        input_usd_per_token: "0.00001",
+        output_usd_per_token: "0.00003",
+        cached_usd_per_token: "-0.000005",
+        effective_at: "2026-06-09T00:00:00Z",
+      };
+
+      expect(service.validatePricing(pricing)).toBe(false);
+    });
+
+    it("should accept valid cached price", () => {
+      const service = createCostService();
+      const pricing: ModelPricing = {
+        input_usd_per_token: "0.00001",
+        output_usd_per_token: "0.00003",
+        cached_usd_per_token: "0.000005",
+        effective_at: "2026-06-09T00:00:00Z",
+      };
+
+      expect(service.validatePricing(pricing)).toBe(true);
+    });
+  });
 });

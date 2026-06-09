@@ -22,6 +22,7 @@ interface CompleteTrace extends RequestTrace {
     prompt_tokens: number;
     completion_tokens: number;
     total_tokens: number;
+    cached_tokens?: number;
   };
   cost?: {
     subtotal_usd: string;
@@ -67,6 +68,7 @@ export interface ITraceService {
     promptTokens: number;
     completionTokens: number;
     totalTokens: number;
+    cachedTokens?: number;
     subtotalUsd: string;
     platformFeeUsd: string;
     totalUsd: string;
@@ -192,6 +194,7 @@ export function createTraceService(deps?: TraceServiceDeps): ITraceService {
           prompt_tokens: data.promptTokens,
           completion_tokens: data.completionTokens,
           total_tokens: data.totalTokens,
+          cached_tokens: data.cachedTokens,
         },
         cost: {
           subtotal_usd: data.subtotalUsd,

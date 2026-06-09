@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { createPaymentService } from "../../src/billing/payment.service.js";
+import { createPaymentService, COST_SAFETY_MARGIN } from "../../src/billing/payment.service.js";
 import { createCostService } from "../../src/billing/cost.service.js";
 import { InsufficientPaymentError } from "../../src/errors.js";
 import type { ChatCompletionRequest, ModelPricing } from "../../src/types.js";
@@ -196,6 +196,142 @@ describe("PaymentService", () => {
       expect(() =>
         service.validatePayment("0.001", "0"),
       ).toThrow(InsufficientPaymentError);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // max_tokens & safety margin (Issue #45 upto scheme)
+  // ---------------------------------------------------------------------------
+
+  describe("estimateTokens - max_tokens support", () => {
+    it("should use request.max_tokens when provided", () => {
+      const service = makeService();
+      const request = makeRequest("Hello, world!");
+      const tokens = service.estimateTokens(request);
+
+      // Default: 4096
+      expect(tokens.estimated_completion_tokens).toBe(4096);
+
+      // With max_tokens specified
+      const requestWithMax: ChatCompletionRequest = {
+        model: "openai/gpt-4o",
+        messages: [{ role: "user", content: "Hello" }],
+        max_tokens: 1024,
+      };
+      const tokensWithMax = service.estimateTokens(requestWithMax);
+      expect(tokensWithMax.estimated_completion_tokens).toBe(1024);
+    });
+  });
+
+  describe("estimateMaxAmount - safety margin", () => {
+    it("should return amount ≥ raw estimate", () => {
+      const service = makeService();
+      const request: ChatCompletionRequest = {
+        model: "openai/gpt-4o",
+        messages: [{ role: "user", content: "Hello, world!" }],
+        max_tokens: 100,
+      };
+
+      const maxAmount = service.estimateMaxAmount(
+        request,
+        TEST_PRICING,
+        TEST_FEE_BPS,
+      );
+      const rawCost = service.estimateTotalCost(
+        service.estimateTokens(request),
+        TEST_PRICING,
+        TEST_FEE_BPS,
+      );
+
+      expect(parseFloat(maxAmount)).toBeGreaterThanOrEqual(
+        parseFloat(rawCost),
+      );
+    });
+
+    it("should apply 1.2x safety margin for typical requests", () => {
+      const service = makeService();
+      const request: ChatCompletionRequest = {
+        model: "openai/gpt-4o",
+        messages: [{ role: "user", content: "Hi" }],
+      };
+
+      // Very short message: prompt ≈ 1 token, completion = 4096
+      // raw cost ≈ 4097 tokens * prices ≈ small number
+      // maxAmount should be ~1.2x rawCost
+      const tokens = service.estimateTokens(request);
+      const rawCost = service.estimateTotalCost(
+        tokens,
+        TEST_PRICING,
+        TEST_FEE_BPS,
+      );
+      const maxAmount = service.estimateMaxAmount(
+        request,
+        TEST_PRICING,
+        TEST_FEE_BPS,
+      );
+
+      const ratio = parseFloat(maxAmount) / parseFloat(rawCost);
+      expect(ratio).toBeCloseTo(COST_SAFETY_MARGIN, 1);
+    });
+
+    it("should be deterministic", () => {
+      const service = makeService();
+      const request: ChatCompletionRequest = {
+        model: "openai/gpt-4o",
+        messages: [{ role: "user", content: "Test message" }],
+      };
+
+      const r1 = service.estimateMaxAmount(
+        request,
+        TEST_PRICING,
+        TEST_FEE_BPS,
+      );
+      const r2 = service.estimateMaxAmount(
+        request,
+        TEST_PRICING,
+        TEST_FEE_BPS,
+      );
+
+      expect(r1).toBe(r2);
+    });
+
+    it("should return '0' not empty string for zero-cost requests", () => {
+      const service = makeService();
+      // Zero input tokens → zero cost → should return "0", not ""
+      const request: ChatCompletionRequest = {
+        model: "openai/gpt-4o",
+        messages: [{ role: "user", content: "" }],
+        max_tokens: 0,
+      };
+
+      const amount = service.estimateMaxAmount(
+        request,
+        TEST_PRICING,
+        TEST_FEE_BPS,
+      );
+
+      expect(amount).toBe("0");
+      expect(amount).not.toBe("");
+    });
+
+    it("should return a valid number string for minimal request", () => {
+      const service = makeService();
+      const request: ChatCompletionRequest = {
+        model: "openai/gpt-4o",
+        messages: [{ role: "user", content: "Hi" }],
+        max_tokens: 1,
+      };
+
+      const amount = service.estimateMaxAmount(
+        request,
+        TEST_PRICING,
+        TEST_FEE_BPS,
+      );
+
+      // Must be a parseable, non-negative number string
+      expect(parseFloat(amount)).toBeGreaterThanOrEqual(0);
+      expect(amount).not.toBe("");
+      expect(amount).not.toBe("NaN");
     });
   });
 });

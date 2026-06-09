@@ -123,9 +123,8 @@ export function createPaymentOrchestrator(
       preferredChain: string,
     ): PaymentRequiredResult {
       const pricing = d.providerRegistry.getModelPricing(body.model);
-      const estimatedTokens = d.paymentService.estimateTokens(body);
-      const estimatedCost = d.paymentService.estimateTotalCost(
-        estimatedTokens,
+      const estimatedMaxAmount = d.paymentService.estimateMaxAmount(
+        body,
         pricing,
         d.platformFeeBps,
       );
@@ -137,7 +136,7 @@ export function createPaymentOrchestrator(
         scheme: "exact",
         network: chainToCaip2(preferredChain),
         asset: preferredAsset,
-        amount: estimatedCost,
+        amount: estimatedMaxAmount,
         payTo: d.merchantAddress,
         maxTimeoutSeconds: d.offerTtlSeconds,
         extra: { quote_id: quoteId, request_hash: requestHash },
@@ -156,7 +155,7 @@ export function createPaymentOrchestrator(
             request_hash: requestHash,
             chain: preferredChain,
             asset: preferredAsset,
-            amount: estimatedCost,
+            amount: estimatedMaxAmount,
             expires_at: new Date(
               Date.now() + d.offerTtlSeconds * 1000,
             ).toISOString(),
@@ -253,6 +252,7 @@ export function createPaymentOrchestrator(
             prompt_tokens: response.usage.prompt_tokens,
             completion_tokens: response.usage.completion_tokens,
             total_tokens: response.usage.total_tokens,
+            cached_tokens: response.usage.prompt_tokens_details?.cached_tokens,
           };
           const cost = d.costService.calculateCost(
             usage,
@@ -308,6 +308,7 @@ export function createPaymentOrchestrator(
             promptTokens: response.usage.prompt_tokens,
             completionTokens: response.usage.completion_tokens,
             totalTokens: response.usage.total_tokens,
+            cachedTokens: response.usage.prompt_tokens_details?.cached_tokens ?? 0,
             subtotalUsd: cost.subtotal_usd,
             platformFeeUsd: cost.platform_fee_usd,
             totalUsd: cost.total_usd,
@@ -337,6 +338,7 @@ export function createPaymentOrchestrator(
                 model_used: decision.selected_model,
                 unit_price_input_usd: cost.unit_price_input,
                 unit_price_output_usd: cost.unit_price_output,
+                unit_price_cached_usd: cost.unit_price_cached,
                 total_cost_usd: cost.total_usd,
                 route_proof_hash: decision.route_proof_hash,
               },
