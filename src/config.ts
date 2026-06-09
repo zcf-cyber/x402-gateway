@@ -37,6 +37,9 @@ const configSchema = z.object({
   deepseekApiKey: z.string().optional(),
   deepseekBaseUrl: z.string().url().optional(),
 
+  xiaomiApiKey: z.string().optional(),
+  xiaomiBaseUrl: z.string().url().optional(),
+
   evmRpcUrl: z.string().url().optional(),
   alchemyApiKey: z.string().optional(),
   solanaRpcUrl: z.string().url().optional(),
@@ -72,6 +75,8 @@ export function loadConfig(): Config {
     zhipuBaseUrl: process.env["ZHIPU_BASE_URL"],
     deepseekApiKey: process.env["DEEPSEEK_API_KEY"],
     deepseekBaseUrl: process.env["DEEPSEEK_BASE_URL"],
+    xiaomiApiKey: process.env["XIAOMI_API_KEY"],
+    xiaomiBaseUrl: process.env["XIAOMI_BASE_URL"],
     platformFeeBps: process.env["PLATFORM_FEE_BPS"],
     evmRpcUrl: process.env["EVM_RPC_URL"],
     alchemyApiKey: process.env["ALCHEMY_API_KEY"],

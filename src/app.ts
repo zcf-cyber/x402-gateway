@@ -232,15 +232,23 @@ export async function buildApp(config: Config) {
 
   if (config.minimaxApiKey) {
     const minimaxBaseUrl = config.minimaxBaseUrl || "https://api.minimaxi.com/v1";
-    // [CONFIRMED] MiniMax-M2.5 = MiMo-V2.5, pricing from MiMo official
-    providerRegistry.register("MiniMax-M2.5", new OpenAIAdapter(config.minimaxApiKey, minimaxBaseUrl), {
+    // [PLACEHOLDER] MiniMax models — 暂无确认的模型注册，待后续添加
+    // 注意: MiMo 系列模型 (mimo-v2.5, mimo-v2.5-pro) 是 Xiaomi 的模型，
+    // 不是 MiniMax。请参见下方 Xiaomi provider 区块。
+    void (minimaxBaseUrl); // suppress unused warning until models are registered
+  }
+
+  if (config.xiaomiApiKey) {
+    const xiaomiBaseUrl = config.xiaomiBaseUrl || "https://api.xiaomimimo.com/v1";
+    // [CONFIRMED] xiaomi/mimo-v2.5 = MiMo-V2.5, pricing from Xiaomi official
+    providerRegistry.register("xiaomi/mimo-v2.5", new OpenAIAdapter(config.xiaomiApiKey, xiaomiBaseUrl), {
       input_usd_per_token: "0.00000014",    // $0.14 per 1M tokens (cache miss)
       output_usd_per_token: "0.00000028",   // $0.28 per 1M tokens
       cached_usd_per_token: "0.0000000028", // $0.0028 per 1M tokens (cache hit)
       effective_at: new Date().toISOString(),
     });
-    // [CONFIRMED] MiniMax-M2.7 = MiMo-V2.5-Pro, pricing from MiMo official
-    providerRegistry.register("MiniMax-M2.7", new OpenAIAdapter(config.minimaxApiKey, minimaxBaseUrl), {
+    // [CONFIRMED] xiaomi/mimo-v2.5-pro = MiMo-V2.5-Pro, pricing from Xiaomi official
+    providerRegistry.register("xiaomi/mimo-v2.5-pro", new OpenAIAdapter(config.xiaomiApiKey, xiaomiBaseUrl), {
       input_usd_per_token: "0.000000435",    // $0.435 per 1M tokens (cache miss)
       output_usd_per_token: "0.00000087",    // $0.87 per 1M tokens
       cached_usd_per_token: "0.0000000036",  // $0.0036 per 1M tokens (cache hit)
