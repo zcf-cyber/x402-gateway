@@ -232,10 +232,32 @@ export async function buildApp(config: Config) {
 
   if (config.minimaxApiKey) {
     const minimaxBaseUrl = config.minimaxBaseUrl || "https://api.minimaxi.com/v1";
-    // [PLACEHOLDER] MiniMax models — 暂无确认的模型注册，待后续添加
-    // 注意: MiMo 系列模型 (mimo-v2.5, mimo-v2.5-pro) 是 Xiaomi 的模型，
-    // 不是 MiniMax。请参见下方 Xiaomi provider 区块。
-    void (minimaxBaseUrl); // suppress unused warning until models are registered
+
+    // [CONFIRMED] MiniMax-M3 — gradient pricing averaged (≤512k & >512k)
+    //   input: ($0.30+$0.60)/2 = $0.45/1M, output: ($1.20+$2.40)/2 = $1.80/1M,
+    //   cache: ($0.06+$0.12)/2 = $0.09/1M.  All pre-discounted (permanent 50% off).
+    providerRegistry.register("MiniMax-M3", new OpenAIAdapter(config.minimaxApiKey, minimaxBaseUrl), {
+      input_usd_per_token: "0.00000045",    // $0.45 per 1M tokens (avg)
+      output_usd_per_token: "0.0000018",    // $1.80 per 1M tokens (avg)
+      cached_usd_per_token: "0.00000009",   // $0.09 per 1M tokens (avg)
+      effective_at: new Date().toISOString(),
+    });
+
+    // [CONFIRMED] MiniMax-M2.7
+    providerRegistry.register("MiniMax-M2.7", new OpenAIAdapter(config.minimaxApiKey, minimaxBaseUrl), {
+      input_usd_per_token: "0.0000003",    // $0.30 per 1M tokens
+      output_usd_per_token: "0.0000012",   // $1.20 per 1M tokens
+      cached_usd_per_token: "0.00000006",  // $0.06 per 1M tokens
+      effective_at: new Date().toISOString(),
+    });
+
+    // [CONFIRMED] MiniMax-M2.7-highspeed
+    providerRegistry.register("MiniMax-M2.7-highspeed", new OpenAIAdapter(config.minimaxApiKey, minimaxBaseUrl), {
+      input_usd_per_token: "0.0000006",    // $0.60 per 1M tokens
+      output_usd_per_token: "0.0000024",   // $2.40 per 1M tokens
+      cached_usd_per_token: "0.00000006",  // $0.06 per 1M tokens
+      effective_at: new Date().toISOString(),
+    });
   }
 
   if (config.xiaomiApiKey) {
