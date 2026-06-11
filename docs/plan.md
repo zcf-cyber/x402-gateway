@@ -132,3 +132,34 @@ flowchart TD
 - 双支付网关：抽象 `PaymentChannel` 支持 `x402` / `stripe`
 - MCP 市场：`McpProvider`、`McpService`、`McpSubscription`、`McpUsageSettlement`
 
+## 11. 技术债务
+
+> 记录 MVP 阶段已知的技术债务，需在生产上线前清偿。
+
+### TD-1：Gateway 直接结算 → Facilitator 模式迁移
+
+- **现状**：Gateway 通过 `exact.settleService` 直接调用 `walletClient.sendTransaction()` 提交 `transferWithAuthorization` 交易。Gateway 同时承担 Resource Server 和 Facilitator 职责。
+- **目标**：迁移到官方 `x402ResourceServer` + `HTTPFacilitatorClient` 模式，实现职责分离。
+- **原因**：
+  1. 职责分离是生产系统基本要求，便于独立监控和扩展
+  2. 官方 facilitator 提供幂等性保证、错误恢复、rollback/cancellation 支持
+  3. 随链数增长，直接结算的维护成本累积
+  4. 迁移后自动受益于 `@x402/evm` 后续版本更新
+- **影响范围**：
+  - `src/gateway/orchestrator.ts`：替换 `schemeRegistry.settle()` 为 `x402ResourceServer.settlePayment()`
+  - `src/x402/schemes/exact/settle.service.ts`：废弃，由 facilitator 替代
+  - `src/app.ts`：引入 `HTTPFacilitatorClient` 配置
+  - 新增：facilitator 服务部署配置
+- **计划**：里程碑 Week 4-5，审计接口完成后优先处理
+- **关联 Issue**：#87（本 PR 已解决字段合规性，facilitator 迁移为后续步骤）
+
+### TD-2：Gateway 自定义 Scheme → 迁移至 x402ResourceServer
+
+- **现状**：Gateway 使用自定义 `SchemeRegistry` + `PaymentScheme` 接口实现 scheme 注册和分发。
+- **目标**：迁移到官方 `x402ResourceServer` 的 scheme 注册机制。
+- **原因**：
+  1. `x402ResourceServer` 内置 hook 扩展点（before/after verify/settle），当前自定义实现无此能力
+  2. 官方 SDK 提供 `registerExtension()` 机制支持协议扩展
+  3. 与 facilitator 迁移协同进行，减少重复工作
+- **计划**：与 TD-1 一同在里程碑 Week 4-5 完成
+
