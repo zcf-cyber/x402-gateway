@@ -11,10 +11,6 @@ import type {
   SettlementResponseV2,
 } from "../../../src/x402/transport/types.js";
 
-// ---------------------------------------------------------------------------
-// CAIP-2 Conversion Tests
-// ---------------------------------------------------------------------------
-
 describe("CAIP-2 chain conversion", () => {
   it.each([
     { chain: "base", caip2: "eip155:8453" },
@@ -60,10 +56,6 @@ describe("CAIP-2 chain conversion", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Encode / Decode Round-trip Tests
-// ---------------------------------------------------------------------------
-
 describe("Transport encode/decode round-trip", () => {
   it("encodePaymentRequired → decode should be reversible", () => {
     const requirements: PaymentRequirementsV2[] = [
@@ -85,11 +77,13 @@ describe("Transport encode/decode round-trip", () => {
     expect(encoded).toBeTruthy();
     expect(typeof encoded).toBe("string");
 
-    // Decode back
     const decoded = JSON.parse(
       Buffer.from(encoded, "base64url").toString("utf-8"),
     );
     expect(decoded.x402Version).toBe(2);
+    // resource is required per x402 v2 spec (PaymentRequiredV2Schema)
+    expect(decoded.resource).toBeDefined();
+    expect(decoded.resource.url).toBe("/v1/chat/completions");
     expect(decoded.accepts).toHaveLength(1);
     expect(decoded.accepts[0].scheme).toBe("exact");
     expect(decoded.accepts[0].network).toBe("eip155:8453");
@@ -173,8 +167,6 @@ describe("Transport encode/decode round-trip", () => {
   });
 
   it("decodePaymentPayload should throw for invalid base64url", () => {
-    // Buffer.from with invalid base64url silently produces garbage bytes,
-    // which then fail JSON.parse.
     expect(() => decodePaymentPayload("!!!not-valid-base64!!!")).toThrow(
       "not valid JSON",
     );
@@ -189,15 +181,10 @@ describe("Transport encode/decode round-trip", () => {
     const encoded = Buffer.from(
       JSON.stringify({ x402Version: 2 }),
     ).toString("base64url");
-    expect(() => decodePaymentPayload(encoded)).toThrow(
-      "missing 'accepted' field",
-    );
+    // Zod schema validation from @x402/core/schemas now handles this
+    expect(() => decodePaymentPayload(encoded)).toThrow(/accepted/i);
   });
 });
-
-// ---------------------------------------------------------------------------
-// Real-world scenarios
-// ---------------------------------------------------------------------------
 
 describe("Transport real-world scenarios", () => {
   it("should produce a header compatible with x402 v2 spec format", () => {
@@ -214,16 +201,126 @@ describe("Transport real-world scenarios", () => {
     ];
 
     const header = encodePaymentRequired(requirements);
-    // The header should be a valid base64url string
     expect(header).toMatch(/^[A-Za-z0-9_-]+$/);
 
-    // Should be decodable
     const decoded = Buffer.from(header, "base64url").toString("utf-8");
     const parsed = JSON.parse(decoded);
     expect(parsed.x402Version).toBe(2);
+    // resource is required per x402 v2 PaymentRequiredV2Schema
+    expect(parsed.resource).toBeDefined();
+    expect(parsed.resource.url).toBe("/v1/chat/completions");
     expect(parsed.accepts).toHaveLength(1);
     expect(parsed.accepts[0].payTo).toBe(
       "0xAb5801a7D398351b8bE11C439e05C5B3259aeC9B",
     );
+  });
+});
+
+describe("Orchestrator build402Response — ExactEvmScheme.parsePrice() path", () => {
+  it("should produce PaymentRequired with @x402/evm compliant fields for base mainnet", async () => {
+    const { createPaymentOrchestrator } = await import(
+      "../../../src/gateway/orchestrator.js"
+    );
+    const { createTokenRegistry } = await import(
+      "../../../src/x402/token-registry.service.js"
+    );
+    const { createChainRegistry } = await import(
+      "../../../src/x402/chain-registry.service.js"
+    );
+    const { createSchemeRegistry } = await import(
+      "../../../src/x402/schemes/registry.js"
+    );
+    const { createExactScheme } = await import(
+      "../../../src/x402/schemes/exact/index.js"
+    );
+    const { createProviderRegistry } = await import(
+      "../../../src/provider/index.js"
+    );
+    const { OpenAIAdapter } = await import(
+      "../../../src/provider/openai.adapter.js"
+    );
+    const { createPaymentService } = await import(
+      "../../../src/billing/payment.service.js"
+    );
+    const { createCostService } = await import(
+      "../../../src/billing/cost.service.js"
+    );
+
+    const tokenRegistry = createTokenRegistry();
+    tokenRegistry.register("base", "USDC", {
+      symbol: "USDC",
+      decimals: 6,
+      address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+      type: "erc20",
+      eip712Name: "USD Coin",
+      eip712Version: "2",
+    });
+
+    const chainRegistry = createChainRegistry();
+    chainRegistry.register("base", {
+      chain: { id: 8453, name: "Base", nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 }, rpcUrls: { default: { http: [] } } } as import("viem").Chain,
+      usdcAddress: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+      rpcUrl: "https://mainnet.base.org",
+    });
+
+    const providerRegistry = createProviderRegistry();
+    providerRegistry.register("gpt-4o", new OpenAIAdapter("test-key"), {
+      input_usd_per_token: "0.0000025",
+      output_usd_per_token: "0.00001",
+      effective_at: new Date().toISOString(),
+    });
+
+    const costService = createCostService();
+    const schemeRegistry = createSchemeRegistry();
+    schemeRegistry.register(createExactScheme());
+
+    const orchestrator = createPaymentOrchestrator({
+      schemeRegistry,
+      chainRegistry,
+      tokenRegistry,
+      replayService: { checkAndMark: async () => {}, checkIdempotency: async () => null, saveIdempotency: async () => {} } as never,
+      providerRegistry,
+      routerService: { route: async () => ({ decision: {} as never, response: {} as never }) } as never,
+      meterService: { recordUsage: async () => {} } as never,
+      costService,
+      ledgerService: { commit: async () => {} } as never,
+      paymentService: createPaymentService({ costService }),
+      traceService: { startTrace: async () => {}, completeTrace: async () => {}, failTrace: async () => {} } as never,
+      platformFeeBps: 50,
+      paymentChain: "base",
+      merchantAddress: "0x0000000000000000000000000000000000000001",
+      offerTtlSeconds: 300,
+      paymentChainConfig: {
+        chain: { id: 8453, name: "Base", nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 }, rpcUrls: { default: { http: [] } } } as import("viem").Chain,
+        rpcUrl: "https://mainnet.base.org",
+        tokenAddress: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" as `0x${string}`,
+      },
+    });
+
+    const result = await orchestrator.build402Response(
+      { model: "gpt-4o", messages: [{ role: "user", content: "Hi" }] },
+      "USDC",
+      "base",
+    );
+
+    expect(result.statusCode).toBe(402);
+    expect(result.paymentRequiredHeader).toBeDefined();
+
+    const decoded = JSON.parse(
+      Buffer.from(result.paymentRequiredHeader, "base64url").toString("utf-8"),
+    );
+    expect(decoded.x402Version).toBe(2);
+    expect(decoded.resource).toBeDefined();
+    expect(decoded.resource.url).toBe("/v1/chat/completions");
+    expect(decoded.accepts).toHaveLength(1);
+
+    const accept = decoded.accepts[0];
+    expect(accept.asset).toMatch(/^0x[a-fA-F0-9]{40}$/);
+    expect(accept.asset.toLowerCase()).toBe("0x833589fcd6edb6e08f4c7c32d4f71b54bda02913");
+    expect(accept.amount).toMatch(/^\d+$/);
+    expect(accept.extra.name).toBeDefined();
+    expect(accept.extra.version).toBeDefined();
+    expect(accept.extra.quote_id).toBeDefined();
+    expect(accept.extra.request_hash).toBeDefined();
   });
 });

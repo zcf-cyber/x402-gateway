@@ -99,7 +99,8 @@ export const TESTNET_CHAINS: Record<string, ChainConfig> = {
     chain: baseSepolia,
     usdcAddress: "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
     tokens: {
-      USDC: usdcToken(6, "0x036CbD53842c5426634e7929541eC2318f3dCF7e", "USD Coin"),
+      // eip712Name must match @x402/evm DEFAULT_STABLECOINS: name="USDC" for eip155:84532
+      USDC: usdcToken(6, "0x036CbD53842c5426634e7929541eC2318f3dCF7e", "USDC"),
     },
   },
 };

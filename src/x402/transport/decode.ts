@@ -2,19 +2,21 @@
 // x402 v2 Transport Layer — Header Decoding
 //
 // Decodes x402 v2 base64url-encoded headers back to typed structures.
+// Validates against @x402/core v2.14.0 official Zod schemas.
 // ---------------------------------------------------------------------------
 
+import { validatePaymentPayload } from "@x402/core/schemas";
 import type { PaymentPayloadV2 } from "./types.js";
 
 /**
  * Decode the PAYMENT-SIGNATURE header from base64url to a PaymentPayloadV2.
  *
- * The header contains a base64url-encoded JSON object following the
- * x402 v2 PaymentPayload schema (as defined by @x402/core v2.x).
+ * Validates against @x402/core v2.14.0 PaymentPayloadV2Schema to ensure
+ * the decoded payload conforms to the official x402 v2 specification.
  *
  * @param header - Raw PAYMENT-SIGNATURE header value
- * @returns Parsed payment payload
- * @throws If the header is not valid base64url or invalid JSON
+ * @returns Parsed payment payload (validated against official schema)
+ * @throws If the header is not valid base64url, invalid JSON, or fails schema validation
  */
 export function decodePaymentPayload(header: string): PaymentPayloadV2 {
   if (!header || header.trim().length === 0) {
@@ -39,19 +41,12 @@ export function decodePaymentPayload(header: string): PaymentPayloadV2 {
     );
   }
 
-  if (typeof parsed !== "object" || parsed === null) {
+  // Validate against official @x402/core v2.14.0 PaymentPayloadV2Schema
+  try {
+    return validatePaymentPayload(parsed) as unknown as PaymentPayloadV2;
+  } catch (err) {
     throw new Error(
-      "Invalid PAYMENT-SIGNATURE header: expected a JSON object",
+      `Invalid PAYMENT-SIGNATURE header: ${(err as Error).message}`,
     );
   }
-
-  const obj = parsed as Record<string, unknown>;
-
-  if (typeof obj["accepted"] !== "object" || obj["accepted"] === null) {
-    throw new Error(
-      "Invalid PAYMENT-SIGNATURE header: missing 'accepted' field",
-    );
-  }
-
-  return obj as unknown as PaymentPayloadV2;
 }
