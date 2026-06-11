@@ -90,6 +90,9 @@ describe("Transport encode/decode round-trip", () => {
       Buffer.from(encoded, "base64url").toString("utf-8"),
     );
     expect(decoded.x402Version).toBe(2);
+    // resource is required per x402 v2 spec (PaymentRequiredV2Schema)
+    expect(decoded.resource).toBeDefined();
+    expect(decoded.resource.url).toBe("/v1/chat/completions");
     expect(decoded.accepts).toHaveLength(1);
     expect(decoded.accepts[0].scheme).toBe("exact");
     expect(decoded.accepts[0].network).toBe("eip155:8453");
@@ -189,9 +192,8 @@ describe("Transport encode/decode round-trip", () => {
     const encoded = Buffer.from(
       JSON.stringify({ x402Version: 2 }),
     ).toString("base64url");
-    expect(() => decodePaymentPayload(encoded)).toThrow(
-      "missing 'accepted' field",
-    );
+    // Zod schema validation from @x402/core/schemas now handles this
+    expect(() => decodePaymentPayload(encoded)).toThrow(/accepted/i);
   });
 });
 
@@ -221,6 +223,9 @@ describe("Transport real-world scenarios", () => {
     const decoded = Buffer.from(header, "base64url").toString("utf-8");
     const parsed = JSON.parse(decoded);
     expect(parsed.x402Version).toBe(2);
+    // resource is required per x402 v2 PaymentRequiredV2Schema
+    expect(parsed.resource).toBeDefined();
+    expect(parsed.resource.url).toBe("/v1/chat/completions");
     expect(parsed.accepts).toHaveLength(1);
     expect(parsed.accepts[0].payTo).toBe(
       "0xAb5801a7D398351b8bE11C439e05C5B3259aeC9B",

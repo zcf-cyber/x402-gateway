@@ -24,19 +24,29 @@ export interface PaymentRequirementsV2 {
   amount: string;               // atomic units (e.g., "6195042" for 6.195042 USDC with 6 decimals)
   payTo: string;                // merchant/facilitator address
   maxTimeoutSeconds: number;    // expiration in seconds
-  extra: Record<string, unknown>; // scheme-specific extensions (e.g., name, version for EIP-712)
+  /** 
+   * Scheme-specific extensions (e.g., name, version for EIP-712).
+   * Per @x402/core v2.14.0 schema: optional + nullable (OptionalAny).
+   */
+  extra?: Record<string, unknown> | null;
+}
+
+/** 
+ * Resource info as defined by @x402/core v2.14.0 ResourceInfoSchema.
+ * Note: `url` is REQUIRED (must be a non-empty string) per official schema.
+ */
+export interface ResourceInfo {
+  url: string;                   // required: non-empty URL string
+  description?: string;
+  mimeType?: string;
+  serviceName?: string;
 }
 
 /** PAYMENT-REQUIRED header payload. */
 export interface PaymentRequiredV2 {
   x402Version: number;
   error?: string;
-  resource?: {
-    url?: string;
-    description?: string;
-    mimeType?: string;
-    serviceName?: string;
-  };
+  resource: ResourceInfo;           // required per official PaymentRequiredV2Schema
   accepts: PaymentRequirementsV2[];
   extensions?: Record<string, unknown>;
 }
@@ -44,10 +54,7 @@ export interface PaymentRequiredV2 {
 /** PAYMENT-SIGNATURE header payload (client → gateway). */
 export interface PaymentPayloadV2 {
   x402Version: number;
-  resource?: {
-    url?: string;
-    description?: string;
-  };
+  resource?: ResourceInfo;           // optional per official schema
   accepted: PaymentRequirementsV2;   // the requirement being accepted
   payload: Record<string, unknown>;   // scheme-specific data (e.g., signature)
   extensions?: Record<string, unknown>;
