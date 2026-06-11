@@ -35,7 +35,7 @@ export function registerRoutes(
     // No payment → return 402 with PAYMENT-REQUIRED header
     // ------------------------------------------------------------------
     if (!paymentSignature) {
-      const result = services.orchestrator.build402Response(
+      const result = await services.orchestrator.build402Response(
         body,
         preferredAsset,
         preferredChain,

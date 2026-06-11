@@ -9,6 +9,8 @@
 // ---------------------------------------------------------------------------
 
 import { createHash, randomUUID } from "crypto";
+import { ExactEvmScheme } from "@x402/evm/exact/server";
+import { getDefaultAsset } from "@x402/evm";
 import { computeRequestHash } from "../x402/hash.js";
 import { decodePaymentPayload } from "../x402/transport/decode.js";
 import {
@@ -83,7 +85,7 @@ export interface IPaymentOrchestrator {
     body: ChatCompletionRequest,
     preferredAsset: string,
     preferredChain: string,
-  ): PaymentRequiredResult;
+  ): Promise<PaymentRequiredResult>;
 
   processPayment(
     body: ChatCompletionRequest,
@@ -107,6 +109,41 @@ function sigHash(payload: PaymentPayloadV2): string {
     .digest("base64url");
 }
 
+/**
+ * Convert an atomic-unit amount string back to a decimal string using token decimals.
+ * e.g., atomicToDecimal("6195042", 6) → "6.195042"
+ *
+ * Uses @x402/evm getDefaultAsset for canonical decimal resolution when available.
+ */
+function atomicToDecimal(atomicAmount: string, decimals: number): string {
+  // If amount already contains a decimal point, it's already in decimal format
+  if (atomicAmount.includes(".")) return atomicAmount;
+
+  const padded = atomicAmount.padStart(decimals + 1, "0");
+  const intPart = padded.slice(0, -decimals) || "0";
+  const fracPart = padded.slice(-decimals);
+  // Trim trailing zeros in fraction for cleaner display
+  const trimmed = fracPart.replace(/0+$/, "");
+  return trimmed ? `${intPart}.${trimmed}` : intPart;
+}
+
+/** Resolve token decimals for a given CAIP-2 network. Uses @x402/evm canonical defaults. */
+function resolveDecimals(
+  network: string,
+  tokenRegistry: ITokenRegistry,
+  asset: string,
+): number {
+  try {
+    // getDefaultAsset accepts Network (branded `${string}:${string}`), narrow via cast
+    return getDefaultAsset(network as `${string}:${string}`).decimals;
+  } catch {
+    const config =
+      tokenRegistry.getByAddress?.(network, asset) ??
+      tokenRegistry.get(network, asset);
+    return config?.decimals ?? 6;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Factory
 // ---------------------------------------------------------------------------
@@ -117,11 +154,11 @@ export function createPaymentOrchestrator(
   const d = deps;
 
   return {
-    build402Response(
+    async build402Response(
       body: ChatCompletionRequest,
       preferredAsset: string,
       preferredChain: string,
-    ): PaymentRequiredResult {
+    ): Promise<PaymentRequiredResult> {
       const pricing = d.providerRegistry.getModelPricing(body.model);
       const estimatedMaxAmount = d.paymentService.estimateMaxAmount(
         body,
@@ -131,15 +168,49 @@ export function createPaymentOrchestrator(
 
       const quoteId = generateQuoteId();
       const requestHash = computeRequestHash(body as unknown as Record<string, unknown>);
+      const caip2Network = chainToCaip2(preferredChain);
+
+      // Use @x402/evm ExactEvmScheme (official package) to build x402/evm-compliant
+      // PaymentRequirementsV2. This ensures:
+      //   - asset is the ERC-20 contract address (not symbol)
+      //   - amount is in atomic units (not decimal)
+      //   - extra includes EIP-712 domain name and version
+      const scheme = new ExactEvmScheme();
+      let compliantAmount: string;
+      let compliantAsset: string;
+      let schemeExtra: Record<string, unknown>;
+
+      try {
+        const parsed = await scheme.parsePrice(estimatedMaxAmount, caip2Network);
+        compliantAmount = parsed.amount;
+        compliantAsset = parsed.asset;
+        schemeExtra = (parsed.extra as Record<string, unknown>) ?? {};
+      } catch {
+        // If network not in @x402/evm DEFAULT_STABLECOINS, fall back to
+        // token registry with @x402/core convertToTokenAmount logic.
+        const { convertToTokenAmount } = await import("@x402/core/utils");
+        const tokenConfig = d.tokenRegistry.get(preferredChain, preferredAsset);
+        compliantAsset = tokenConfig?.address ?? preferredAsset;
+        const decimals = tokenConfig?.decimals ?? 6;
+        compliantAmount = convertToTokenAmount(estimatedMaxAmount, decimals);
+        schemeExtra = {
+          name: tokenConfig?.eip712Name ?? "USD Coin",
+          version: tokenConfig?.eip712Version ?? "2",
+        };
+      }
 
       const requirement: PaymentRequirementsV2 = {
         scheme: "exact",
-        network: chainToCaip2(preferredChain),
-        asset: preferredAsset,
-        amount: estimatedMaxAmount,
+        network: caip2Network,
+        asset: compliantAsset,
+        amount: compliantAmount,
         payTo: d.merchantAddress,
         maxTimeoutSeconds: d.offerTtlSeconds,
-        extra: { quote_id: quoteId, request_hash: requestHash },
+        extra: {
+          ...schemeExtra,
+          quote_id: quoteId,
+          request_hash: requestHash,
+        },
       };
 
       return {
@@ -261,9 +332,21 @@ export function createPaymentOrchestrator(
           );
 
           // 10. Validate cost <= authorized amount
+          // Convert authorized amount from atomic units to decimal for comparison,
+          // using @x402/evm canonical decimals where available.
+          const acceptedNetwork = paymentPayload.accepted.network;
+          const acceptedDecimals = resolveDecimals(
+            acceptedNetwork,
+            d.tokenRegistry,
+            paymentPayload.accepted.asset,
+          );
+          const authorizedDecimal = atomicToDecimal(
+            paymentPayload.accepted.amount,
+            acceptedDecimals,
+          );
           d.paymentService.validatePayment(
             cost.total_usd,
-            paymentPayload.accepted.amount,
+            authorizedDecimal,
           );
 
           // 11. Commit to ledger (append-only)

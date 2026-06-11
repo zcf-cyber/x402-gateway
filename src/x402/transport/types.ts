@@ -20,11 +20,11 @@ export type Caip2Id = `${string}:${string}`;
 export interface PaymentRequirementsV2 {
   scheme: string;               // e.g., "exact"
   network: Caip2Id;             // CAIP-2 chain identifier
-  asset: string;                // e.g., "USDC"
-  amount: string;               // human-readable amount (e.g., "0.001")
+  asset: string;                // ERC-20 contract address (e.g., "0x036CbD..."), not symbol
+  amount: string;               // atomic units (e.g., "6195042" for 6.195042 USDC with 6 decimals)
   payTo: string;                // merchant/facilitator address
   maxTimeoutSeconds: number;    // expiration in seconds
-  extra: Record<string, unknown>; // scheme-specific extensions
+  extra: Record<string, unknown>; // scheme-specific extensions (e.g., name, version for EIP-712)
 }
 
 /** PAYMENT-REQUIRED header payload. */
