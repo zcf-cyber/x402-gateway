@@ -127,16 +127,22 @@ function atomicToDecimal(atomicAmount: string, decimals: number): string {
   return trimmed ? `${intPart}.${trimmed}` : intPart;
 }
 
-/** Resolve token decimals for a given CAIP-2 network. Uses @x402/evm canonical defaults. */
+/** 
+ * Resolve token decimals for a given CAIP-2 network. Uses @x402/evm canonical defaults.
+ *
+ * NOTE: Only uses the `network` parameter for @x402/evm lookup — `asset` is the
+ * fallback key for tokenRegistry when the network is not in DEFAULT_STABLECOINS
+ * (e.g., eip155:1 / Ethereum mainnet). MVP assumes one default token per network.
+ */
 function resolveDecimals(
   network: string,
   tokenRegistry: ITokenRegistry,
   asset: string,
 ): number {
   try {
-    // getDefaultAsset accepts Network (branded `${string}:${string}`), narrow via cast
     return getDefaultAsset(network as `${string}:${string}`).decimals;
   } catch {
+    // eip155:1 and other networks not in DEFAULT_STABLECOINS fall back here
     const config =
       tokenRegistry.getByAddress?.(network, asset) ??
       tokenRegistry.get(network, asset);
@@ -186,8 +192,9 @@ export function createPaymentOrchestrator(
         compliantAsset = parsed.asset;
         schemeExtra = (parsed.extra as Record<string, unknown>) ?? {};
       } catch {
-        // If network not in @x402/evm DEFAULT_STABLECOINS, fall back to
-        // token registry with @x402/core convertToTokenAmount logic.
+        // If network not in @x402/evm DEFAULT_STABLECOINS (e.g., eip155:1 for
+        // Ethereum mainnet), fall back to token registry with @x402/core
+        // convertToTokenAmount logic and chain-config eip712Name.
         const { convertToTokenAmount } = await import("@x402/core/utils");
         const tokenConfig = d.tokenRegistry.get(preferredChain, preferredAsset);
         compliantAsset = tokenConfig?.address ?? preferredAsset;
